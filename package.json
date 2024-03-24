@@ -1,0 +1,31 @@
+{
+  "name": "ak-fetch",
+  "version": "1.0.0",
+  "description": "fetch for ak",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ak--47/ak-fetch.git"
+  },
+  "author": "AK",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ak--47/ak-fetch/issues"
+  },
+  "homepage": "https://github.com/ak--47/ak-fetch#readme",
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.0"
+  },
+  "dependencies": {
+    "ak-tools": "^1.0.51",
+    "dotenv": "^16.4.5",
+    "fetch-retry": "^6.0.0",
+    "querystring": "^0.2.1",
+    "readline": "^1.3.0",
+    "run-queue": "^2.0.1"
+  }
+}
