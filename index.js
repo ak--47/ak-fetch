@@ -17,8 +17,11 @@ require('dotenv').config({ debug: true, override: false });
  * @property {Object|null} bodyParams - An object representing the body parameters to be sent in the request.
  * @property {Object} headers - An object representing the headers to be sent in the request.
  * @property {boolean} [verbose] - Log progress of the requests.
- * @property {boolean} [dryRun] - Don't actually make requests.
+ * @property {boolean | string} [dryRun] - Don't actually make requests.
  * @property {string} [logFile] - If specified, responses will be saved to a file.
+ * @property {number} [retries] - Number of retries for failed requests.
+ * @property {number} [retryDelay] - Delay between retries.
+ * @property {number[]} [retryOn] - Status codes to retry on.
  */
 
 
@@ -45,14 +48,19 @@ async function main(PARAMS) {
 		logFile = undefined,
 		delay = 0,
 		verbose = false,
+		retries = 3,
+		retryDelay = 1000,
+		retryOn = [429, 500, 502, 503, 504],
 	} = PARAMS;
 
 	if (!url) throw new Error("No URL provided");
 	if (!data) throw new Error("No data provided");
 
+	const retryConfig = { retries, retryDelay, retryOn };
+
 	if (verbose) {
 		const { data, ...NON_DATA_PARAMS } = PARAMS;
-		console.log('\n\tJOB CONFIG:\n', u.json(NON_DATA_PARAMS), '\n');		
+		console.log('\n\tJOB CONFIG:\n', u.json(NON_DATA_PARAMS), '\n');
 	}
 
 	const queue = new RunQueue({
@@ -62,14 +70,16 @@ async function main(PARAMS) {
 	const batches = batchData(data, batchSize);
 	const totalReq = batches.length;
 	const responses = [];
+	let count = 0;
 
-	if (verbose) console.log(`\n\trecords: ${u.comma(data.length)} requests: ${u.comma(totalReq)}\n`);
-	
+	if (verbose) console.log(`\n\trecords: ${u.comma(data.length)} requests: ${u.comma(totalReq)} concurrency: ${concurrency} delay: ${delay}ms\n`);
+
 
 	batches.forEach((batch, index) => {
 		queue.add(0, async () => {
 			// @ts-ignore
-			const response = await makePostRequest(url, batch, searchParams, headers, bodyParams, dryRun);
+			const response = await makePostRequest(url, batch, searchParams, headers, bodyParams, dryRun, retryConfig);
+			count++;
 			responses.push(response);
 			if (delay) await u.sleep(delay);
 
@@ -77,7 +87,7 @@ async function main(PARAMS) {
 			// @ts-ignore
 			if (!dryRun) {
 				readline.cursorTo(process.stdout, 0);
-				const msg = `completed ${u.comma(index + 1)} of ${u.comma(totalReq)} requests    ${Math.floor((index + 1) / totalReq * 100)}%`;
+				const msg = `completed ${u.comma(count)} of ${u.comma(totalReq)} requests    ${Math.floor((count) / totalReq * 100)}%\t`;
 				process.stdout.write(`\t${msg}\t`);
 			}
 		});
@@ -87,7 +97,10 @@ async function main(PARAMS) {
 		await queue.run();
 		console.log("\nAll batches have been processed.\n");
 		if (logFile) {
-			u.touch(logFile, responses, true);
+			if (dryRun === 'curl') await u.touch(logFile, responses.join("\n\n"), false);
+			else {
+				await u.touch(logFile, responses, true);
+			}
 			console.log(`\n written to ${logFile}`);
 		}
 		return responses;
@@ -98,9 +111,11 @@ async function main(PARAMS) {
 }
 
 
-async function makePostRequest(url, data, searchParams = null, headers = { "Content-Type": 'application/json' }, bodyParams, dryRun = false) {
+async function makePostRequest(url, data, searchParams = null, headers = { "Content-Type": 'application/json' }, bodyParams, dryRun = false, retryConfig) {
 	if (!url) return Promise.resolve("No URL provided");
 	if (!data) return Promise.resolve("No data provided");
+
+	const { retries = 3, retryDelay = 1000, retryOn = [429, 500, 502, 503, 504] } = retryConfig;
 
 	let requestUrl = new URL(url);
 	if (searchParams) {
@@ -109,14 +124,18 @@ async function makePostRequest(url, data, searchParams = null, headers = { "Cont
 		requestUrl.search = params;
 	}
 
+
 	try {
+		/** @type {RequestInit} */
 		const request = {
 			method: "POST",
 			headers: headers,
-			searchParams: searchParams,
-			retries: 3,
-			retryDelay: 1000,
-			retryOn: [429, 418, 500, 502, 503, 504],
+			// searchParams: searchParams,
+			// @ts-ignore
+			retries,
+			retryDelay,
+			retryOn,
+			keepalive: true
 		};
 
 		let payload;
@@ -139,6 +158,29 @@ async function makePostRequest(url, data, searchParams = null, headers = { "Cont
 		}
 
 		if (dryRun) {
+			// @ts-ignore
+			if (dryRun === "curl") {
+				let curlCommand = `curl -X POST "${requestUrl}"`;
+				for (const [key, value] of Object.entries(headers)) {
+					curlCommand += ` -H "${key}: ${value}"`;
+				}
+
+				// Prepare payload based on Content-Type
+				let payloadStr = "";
+				if (headers["Content-Type"] === 'application/x-www-form-urlencoded') {
+					payloadStr = querystring.stringify(payload);
+				} else { // Assumes JSON or other types that require stringified payload
+					payloadStr = JSON.stringify(payload);
+					// Escape single quotes for JSON payload
+					// payloadStr = payloadStr.replace(/'/g, "\\'");
+				}
+
+				// Add payload to curl command
+				curlCommand += ` -d '${payloadStr}'`;
+
+				console.log(`\n${curlCommand}\n`);
+				return curlCommand;
+			}
 			console.log(`url: ${requestUrl}\nbody: ${u.json(payload || data)}`);
 			return request;
 		}
