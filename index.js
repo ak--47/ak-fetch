@@ -19,7 +19,7 @@ require('dotenv').config({ debug: true, override: false });
  * @property {boolean} [verbose] - Log progress of the requests.
  * @property {boolean | string} [dryRun] - Don't actually make requests.
  * @property {string} [logFile] - If specified, responses will be saved to a file.
- * @property {number} [retries] - Number of retries for failed requests.
+ * @property {number | null} [retries] - Number of retries for failed requests; null for fire and forget
  * @property {number} [retryDelay] - Delay between retries.
  * @property {number[]} [retryOn] - Status codes to retry on.
  */
@@ -55,6 +55,7 @@ async function main(PARAMS) {
 
 	if (!url) throw new Error("No URL provided");
 	if (!data) throw new Error("No data provided");
+
 
 	const retryConfig = { retries, retryDelay, retryOn };
 
@@ -116,7 +117,7 @@ async function makePostRequest(url, data, searchParams = null, headers = { "Cont
 	if (!data) return Promise.resolve("No data provided");
 
 	const { retries = 3, retryDelay = 1000, retryOn = [429, 500, 502, 503, 504] } = retryConfig;
-
+	let isFireAndForget = retries === null;
 	let requestUrl = new URL(url);
 	if (searchParams) {
 		let params = new URLSearchParams(searchParams);
@@ -141,8 +142,13 @@ async function makePostRequest(url, data, searchParams = null, headers = { "Cont
 		let payload;
 
 		if (headers?.["Content-Type"] === 'application/x-www-form-urlencoded') {
-			payload = { [bodyParams["dataKey"]]: JSON.stringify(data), ...bodyParams };
-			delete payload.dataKey;
+			if (bodyParams?.["dataKey"]) {
+				payload = { [bodyParams["dataKey"]]: JSON.stringify(data), ...bodyParams };
+				delete payload.dataKey;
+			} 
+			else {
+				payload = { ...bodyParams, ...data };
+			}
 			request.body = querystring.stringify(payload);
 		}
 
@@ -160,9 +166,9 @@ async function makePostRequest(url, data, searchParams = null, headers = { "Cont
 		if (dryRun) {
 			// @ts-ignore
 			if (dryRun === "curl") {
-				let curlCommand = `curl -X POST "${requestUrl}"`;
+				let curlCommand = `curl -X POST "${requestUrl}" \\\n`; // Start the command
 				for (const [key, value] of Object.entries(headers)) {
-					curlCommand += ` -H "${key}: ${value}"`;
+					curlCommand += ` -H "${key}: ${value}" \\\n`; // Add headers
 				}
 
 				// Prepare payload based on Content-Type
@@ -170,9 +176,8 @@ async function makePostRequest(url, data, searchParams = null, headers = { "Cont
 				if (headers["Content-Type"] === 'application/x-www-form-urlencoded') {
 					payloadStr = querystring.stringify(payload);
 				} else { // Assumes JSON or other types that require stringified payload
-					payloadStr = JSON.stringify(payload);
-					// Escape single quotes for JSON payload
-					// payloadStr = payloadStr.replace(/'/g, "\\'");
+					payloadStr = JSON.stringify(payload); // Pretty print JSON
+					// payloadStr = payloadStr.replace(/'/g, "'\\''"); // Escape single quotes
 				}
 
 				// Add payload to curl command
@@ -181,8 +186,14 @@ async function makePostRequest(url, data, searchParams = null, headers = { "Cont
 				console.log(`\n${curlCommand}\n`);
 				return curlCommand;
 			}
+
 			console.log(`url: ${requestUrl}\nbody: ${u.json(payload || data)}`);
 			return request;
+		}
+		if (isFireAndForget) {
+			//do not wait for response
+			fetch(requestUrl, {...request, retries: 0  });
+			return Promise.resolve(null);
 		}
 		const response = await fetch(requestUrl, request);
 

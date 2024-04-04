@@ -4,7 +4,8 @@
   "description": "fetch for ak",
   "main": "index.js",
   "scripts": {
-    "test": "jest"
+    "test": "jest",
+	"post": "npm publish"
   },
   "repository": {
     "type": "git",
