@@ -1,8 +1,17 @@
 # ak-fetch
 
-## 🌐 Overview
+## tldr;
 
-`ak-fetch` is a powerful and flexible tool designed for making bulk `POST` requests to an API endpoints. It allows batching and queuing of requests, concurrency control, retries, and more, making it a robust solution for handling large data operations with ease.
+a "batch and queue" HTTP client for making bulk POST requests to an API endpoint:
+
+<img src="https://aktunes.neocities.org/ak-fetch.gif" />
+
+
+## 🌍 Overview
+
+`ak-fetch` is a powerful and flexible tool designed for making bulk `POST` requests to an API endpoint. It provides a simple interface to batch and queue requests to send data over the network; it also adds features like concurrency control, retries, and more, making it a robust solution for handling large data operations with ease.
+
+i built this module when creating **[hello-mixpanel](https://github.com/ak--47/hello-mixpanel)** as i needed a way to send large amounts of data to various SaaS analytics APIs in a reliable and efficient manner. it was useful enough for me, that i made it into a proper package.
 
 ## 🚀 Installation
 
