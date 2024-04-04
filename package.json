@@ -5,11 +5,15 @@
   "main": "index.js",
   "scripts": {
     "test": "jest",
-	"post": "npm publish"
+    "post": "npm publish",
+	"prune": "rm -rf logs/*"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ak--47/ak-fetch.git"
+  },
+  "bin": {
+    "ak-fetch": "./index.js"
   },
   "author": "AK",
   "license": "ISC",
@@ -27,6 +31,7 @@
     "fetch-retry": "^6.0.0",
     "querystring": "^0.2.1",
     "readline": "^1.3.0",
-    "run-queue": "^2.0.1"
+    "run-queue": "^2.0.1",
+    "yargs": "^17.7.2"
   }
 }

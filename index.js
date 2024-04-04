@@ -2,9 +2,10 @@ const RunQueue = require("run-queue");
 const u = require("ak-tools");
 const readline = require('readline');
 const querystring = require('querystring');
+const cli = require('./cli');
 // @ts-ignore
 const fetch = require("fetch-retry")(global.fetch);
-require('dotenv').config({ debug: true, override: false });
+require('dotenv').config({ debug: false, override: false });
 
 /**
  * @typedef {Object} BatchRequestConfig
@@ -64,9 +65,7 @@ async function main(PARAMS) {
 		console.log('\n\tJOB CONFIG:\n', u.json(NON_DATA_PARAMS), '\n');
 	}
 
-	const queue = new RunQueue({
-		maxConcurrency: concurrency,
-	});
+	const queue = new RunQueue({ maxConcurrency: concurrency });
 
 	const batches = batchData(data, batchSize);
 	const totalReq = batches.length;
@@ -145,7 +144,7 @@ async function makePostRequest(url, data, searchParams = null, headers = { "Cont
 			if (bodyParams?.["dataKey"]) {
 				payload = { [bodyParams["dataKey"]]: JSON.stringify(data), ...bodyParams };
 				delete payload.dataKey;
-			} 
+			}
 			else {
 				payload = { ...bodyParams, ...data };
 			}
@@ -192,7 +191,7 @@ async function makePostRequest(url, data, searchParams = null, headers = { "Cont
 		}
 		if (isFireAndForget) {
 			//do not wait for response
-			fetch(requestUrl, {...request, retries: 0  });
+			fetch(requestUrl, { ...request, retries: 0 });
 			return Promise.resolve(null);
 		}
 		const response = await fetch(requestUrl, request);
@@ -240,3 +239,26 @@ function batchData(data, batchSize, bodyParams = null) {
 
 
 module.exports = main;
+
+
+// this is for CLI
+if (require.main === module) {
+	const params = cli().then((params) => {
+		// @ts-ignore
+		main(params)
+			.then((results) => {
+				if (params.verbose) console.log('\n\nRESULTS:\n\n', u.json(results));
+			})
+			.catch((e) => {
+				console.log('\n\nUH OH! something went wrong; the error is:\n\n');
+				console.error(e);
+				process.exit(1);
+			})
+			.finally(() => {
+				process.exit(0);
+			});
+	});
+
+
+
+}

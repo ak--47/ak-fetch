@@ -1,8 +1,11 @@
-# Logs
-.env*
+# projects
 amc/*
-logs
+
+# Logs
+logs/*
+!logs/.gitkeep
 *.log
+.env*
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

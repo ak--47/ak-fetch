@@ -1,5 +1,7 @@
 // @ts-nocheck
 const main = require('./index.js');
+const { execSync } = require("child_process");
+const u = require('ak-tools');
 
 // Mock fetch
 const REQUEST_BIN = `https://enp5ly7ky8t0c.x.pipedream.net/`;
@@ -12,10 +14,9 @@ beforeEach(() => {
 });
 
 test('direct fetch', () => {
-    fetch('https://example.com');
-    expect(fetch).toHaveBeenCalledTimes(1);
+	fetch('https://example.com');
+	expect(fetch).toHaveBeenCalledTimes(1);
 });
-
 
 test('throws: URL', async () => {
 	expect.assertions(1);
@@ -96,7 +97,6 @@ test('content types', async () => {
 	expect(resultForm[0]).toHaveProperty('success', true);
 });
 
-
 test('dry runs', async () => {
 	const config = {
 		url: REQUEST_BIN,
@@ -106,9 +106,8 @@ test('dry runs', async () => {
 	const result = await main(config);
 	expect(fetch).not.toHaveBeenCalled();
 	expect(result.length).toBe(2);
-	
-});
 
+});
 
 test('curl', async () => {
 	const sampleData = [{ id: 1, name: 'Test' }];
@@ -126,6 +125,38 @@ test('curl', async () => {
 	const result = await main(config);
 	expect(result[0]).toBe(expectedCurlCommand);
 });
+
+const logPath = './logs/test.log';
+const expected = [{ "success": true }, { "success": true }, { "success": true }];
+
+test('cli (JSON)', async () => {
+	const testJson = './testData/testData.json';
+
+	const output = execSync(`node ./index.js ${testJson} --url ${REQUEST_BIN} --log_file ${logPath}`).toString().trim().split("\n").pop();
+
+	const result = await u.load(logPath, true);
+	expect(result).toEqual(expected);
+});
+
+test('cli (JSONL)', async () => {
+	const testJson = './testData/testData.jsonl';
+
+	const output = execSync(`node ./index.js ${testJson} --url ${REQUEST_BIN} --log_file ${logPath}`).toString().trim().split("\n").pop();
+
+
+	const result = await u.load(logPath, true);
+	expect(result).toEqual(expected);
+});
+
+test('cli (pass data)', async () => {
+	const testData = '[{"foo": "bar", "baz": "qux", "mux" : "tux"}]';
+
+	const output = execSync(`node ./index.js --url ${REQUEST_BIN} --log_file ${logPath} --payload '${testData}'`).toString().trim().split("\n").pop();
+
+	const result = await u.load(logPath, true);
+	expect(result).toEqual(expected);
+});
+
 
 
 
