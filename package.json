@@ -1,7 +1,7 @@
 {
   "name": "ak-fetch",
-  "version": "1.0.0",
-  "description": "fetch for ak",
+  "version": "1.0.1",
+  "description": "a batching queuing fetch the ak way",
   "main": "index.js",
   "scripts": {
     "test": "jest",

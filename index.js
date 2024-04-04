@@ -1,3 +1,4 @@
+#! /usr/bin/env node
 const RunQueue = require("run-queue");
 const u = require("ak-tools");
 const readline = require('readline');
