@@ -24,6 +24,8 @@ require('dotenv').config({ debug: false, override: false });
  * @property {number | null} [retries] - Number of retries for failed requests; null for fire and forget
  * @property {number} [retryDelay] - Delay between retries.
  * @property {number[]} [retryOn] - Status codes to retry on.
+ * @property {number} [timeout] - Timeout for the request.
+ * @property {boolean} [keepalive] - use keepalive for the request.
  */
 
 
@@ -53,13 +55,15 @@ async function main(PARAMS) {
 		retries = 3,
 		retryDelay = 1000,
 		retryOn = [429, 500, 502, 503, 504],
+		timeout = 60000,
+		keepalive = false
 	} = PARAMS;
 
 	if (!url) throw new Error("No URL provided");
 	if (!data) throw new Error("No data provided");
 
 
-	const retryConfig = { retries, retryDelay, retryOn };
+	const retryConfig = { retries, retryDelay, retryOn, timeout, keepalive };
 
 	if (verbose) {
 		const { data, ...NON_DATA_PARAMS } = PARAMS;
@@ -116,7 +120,7 @@ async function makePostRequest(url, data, searchParams = null, headers = { "Cont
 	if (!url) return Promise.resolve("No URL provided");
 	if (!data) return Promise.resolve("No data provided");
 
-	const { retries = 3, retryDelay = 1000, retryOn = [429, 500, 502, 503, 504] } = retryConfig;
+	const { retries = 3, retryDelay = 1000, retryOn = [429, 500, 502, 503, 504], timeout = 60000, keepalive = false } = retryConfig;
 	let isFireAndForget = retries === null;
 	let requestUrl = new URL(url);
 	if (searchParams) {
@@ -131,12 +135,12 @@ async function makePostRequest(url, data, searchParams = null, headers = { "Cont
 		const request = {
 			method: "POST",
 			headers: headers,
-			// searchParams: searchParams,
 			// @ts-ignore
 			retries,
 			retryDelay,
 			retryOn,
-			keepalive: true
+			timeout,
+			keepalive,
 		};
 
 		let payload;
