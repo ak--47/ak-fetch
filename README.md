@@ -9,7 +9,7 @@ a "batch and queue" HTTP client for making bulk POST requests to an API endpoint
 
 ## 🌍 Overview
 
-`ak-fetch` is a powerful and flexible tool designed for making bulk `POST` requests to an API endpoint. It provides a simple interface to batch and queue requests to send data over the network; it also adds features like concurrency control, retries, and more, making it a robust solution for handling large data operations with ease.
+`ak-fetch` is a powerful and flexible tool designed for making bulk `POST` requests to an API endpoint. It provides a simple interface to batch and queue requests which send data over the network; it adds oft needed features like concurrency control, retries, fire-and-forget making it a robust solution for handling large data transfer operations with ease.
 
 i built this module when creating **[hello-mixpanel](https://github.com/ak--47/hello-mixpanel)** as i needed a way to send large amounts of data to various SaaS analytics APIs in a reliable and efficient manner. it was useful enough for me, that i made it into a proper package.
 
@@ -21,8 +21,14 @@ To get started with `ak-fetch`, install the module using npm:
 npm install ak-fetch
 ```
 
+you may also use `npx` to run the CLI without installing the package:
+
+```bash
+npx ak-fetch --help
+```
+
 ## 🖥️ Usage
-Use ak-fetch directly in your node script or via the command line:
+Use ak-fetch as a module directly in your node script:
 
 ```javascript
 const akFetch = require('ak-fetch');
@@ -42,7 +48,7 @@ try {
 	console.error('Error:', error);
 }
 ```
-command line usage is similar:
+or via the command line: 
 ```bash
 npx ak-fetch --url https://api.example.com './payloads.json' --batchSize 10 --concurrency 5
 ```
