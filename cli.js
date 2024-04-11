@@ -3,6 +3,7 @@ const { version } = require('./package.json');
 const u = require('ak-tools');
 
 async function cliParams() {
+	// @ts-ignore
 	const args = yargs(process.argv.splice(2))
 		.scriptName("ak-fetch")
 		.usage(`${welcome}\n\nusage:\nnpx $0 [data] [options]
@@ -100,6 +101,7 @@ DOCS: https://github.com/ak--47/ak-fetch`)
 		.argv;
 	// @ts-ignore
 	if (args._.length === 0) {
+		// @ts-ignore
 		yargs.showHelp();
 		process.exit();
 	}

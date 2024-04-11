@@ -3,6 +3,8 @@ const main = require('./index.js');
 const { execSync } = require("child_process");
 const u = require('ak-tools');
 
+/** @typedef {import('./index').BatchRequestConfig} Config */
+
 // Mock fetch
 const REQUEST_BIN = `https://enp5ly7ky8t0c.x.pipedream.net/`;
 
@@ -37,13 +39,15 @@ test('throws: DATA', async () => {
 });
 
 test('fire and forget', async () => {
+	/** @type {Config} */
 	const config = {
 		url: REQUEST_BIN,
 		data: [{}, {}, {}],
 		retries: null
 	};
 	const result = await main(config);
-	expect(result).toEqual([null, null, null]);
+	const expected = Array.from({ length: 3 }, () => ({ url: REQUEST_BIN, data: {}, status: "fire and forget" }));
+	expect(result).toEqual(expected);
 });
 
 test('batches', async () => {
@@ -52,6 +56,7 @@ test('batches', async () => {
 		json: () => Promise.resolve({ success: true }),
 	});
 
+	/** @type {Config} */
 	const config = {
 		url: REQUEST_BIN,
 		data: [{}, {}, {}],
@@ -66,6 +71,7 @@ test('batches also', async () => {
 	// Use the mockFetchResponse helper to set up expected responses
 	fetch.mockImplementationOnce(() => mockFetchResponse({ success: true }));
 
+	/** @type {Config} */
 	const config = {
 		url: REQUEST_BIN,
 		data: [{}, {}, {}],
@@ -78,6 +84,7 @@ test('batches also', async () => {
 test('content types', async () => {
 	fetch.mockImplementationOnce(() => mockFetchResponse({ success: true }));
 
+	/** @type {Config} */
 	const configJson = {
 		url: REQUEST_BIN,
 		data: [{ sampleData: 1 }],
@@ -88,6 +95,7 @@ test('content types', async () => {
 
 	fetch.mockImplementationOnce(() => mockFetchResponse({ success: true }));
 
+	/** @type {Config} */
 	const configForm = {
 		url: REQUEST_BIN,
 		data: [{ sampleData: 1 }],
@@ -98,6 +106,7 @@ test('content types', async () => {
 });
 
 test('dry runs', async () => {
+	/** @type {Config} */
 	const config = {
 		url: REQUEST_BIN,
 		data: [{ sampleData: 1 }, { sampleData: 2 }],
@@ -106,11 +115,11 @@ test('dry runs', async () => {
 	const result = await main(config);
 	expect(fetch).not.toHaveBeenCalled();
 	expect(result.length).toBe(2);
-
 });
 
 test('curl', async () => {
 	const sampleData = [{ id: 1, name: 'Test' }];
+	/** @type {Config} */
 	const config = {
 		url: REQUEST_BIN,
 		data: sampleData,
@@ -157,6 +166,22 @@ test('cli (pass data)', async () => {
 	expect(result).toEqual(expected);
 });
 
+test('shell cmd headers', async () => {
+	/** @type {Config} */
+	const config = {
+		url: REQUEST_BIN,
+		data: [{ sampleData: 1 }],
+		dryRun: true,
+		shell: {command: 'echo "Hello World"', header: 'foo', prefix: 'bar'}
+	};
+
+	const expectedHeaders = {'Content-Type': 'application/json', 'foo': 'bar Hello World'};
+	const result = await main(config);
+	expect(fetch).not.toHaveBeenCalled();
+	expect(result.length).toBe(1);	
+	const {headers} = result[0];
+	expect(headers).toEqual(expectedHeaders);
+});
 
 
 

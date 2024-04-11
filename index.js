@@ -4,8 +4,10 @@ const u = require("ak-tools");
 const readline = require('readline');
 const querystring = require('querystring');
 const cli = require('./cli');
+const nativeFetch = global.fetch;
 // @ts-ignore
 const fetch = require("fetch-retry")(global.fetch);
+const { execSync } = require('child_process');
 require('dotenv').config({ debug: false, override: false });
 
 /**
@@ -26,8 +28,15 @@ require('dotenv').config({ debug: false, override: false });
  * @property {number[]} [retryOn] - Status codes to retry on.
  * @property {number} [timeout] - Timeout for the request.
  * @property {boolean} [keepalive] - use keepalive for the request.
+ * @property {ShellConfig} [shell] - shell command to run to get token/secrets, etc....
  */
 
+/** 
+ * @typedef {Object} ShellConfig
+ * @property {string} command - The shell command to run.
+ * @property {string} [header] - The header to add to the request.
+ * @property {string} [prefix] - The prefix to add to the header.
+ */
 
 /**
  * A function to send a batch of POST requests to an API endpoint.
@@ -47,7 +56,7 @@ async function main(PARAMS) {
 		data = undefined,
 		bodyParams = undefined,
 		searchParams = undefined,
-		headers = undefined,
+		headers = {},
 		dryRun = false,
 		logFile = undefined,
 		delay = 0,
@@ -56,12 +65,17 @@ async function main(PARAMS) {
 		retryDelay = 1000,
 		retryOn = [429, 500, 502, 503, 504],
 		timeout = 60000,
-		keepalive = false
+		keepalive = false,
+		shell = undefined,
 	} = PARAMS;
 
 	if (!url) throw new Error("No URL provided");
 	if (!data) throw new Error("No data provided");
 
+	if (shell) {
+		const commandOutput = execSync(shell.command).toString().trim();
+		headers[shell.header || "Authorization"] = `${shell.prefix || "Bearer"} ${commandOutput}`;
+	}
 
 	const retryConfig = { retries, retryDelay, retryOn, timeout, keepalive };
 
@@ -119,6 +133,7 @@ async function main(PARAMS) {
 async function makePostRequest(url, data, searchParams = null, headers = { "Content-Type": 'application/json' }, bodyParams, dryRun = false, retryConfig) {
 	if (!url) return Promise.resolve("No URL provided");
 	if (!data) return Promise.resolve("No data provided");
+	if (!headers["Content-Type"]) headers["Content-Type"] = 'application/json';
 
 	const { retries = 3, retryDelay = 1000, retryOn = [429, 500, 502, 503, 504], timeout = 60000, keepalive = false } = retryConfig;
 	let isFireAndForget = retries === null;
@@ -196,8 +211,8 @@ async function makePostRequest(url, data, searchParams = null, headers = { "Cont
 		}
 		if (isFireAndForget) {
 			//do not wait for response
-			fetch(requestUrl, { ...request, retries: 0 });
-			return Promise.resolve(null);
+			nativeFetch(requestUrl, { ...request });
+			return Promise.resolve({ url: requestUrl.toString(), status: "fire and forget", data: payload });
 		}
 		const response = await fetch(requestUrl, request);
 
