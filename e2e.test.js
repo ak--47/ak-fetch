@@ -2,6 +2,8 @@
 const main = require('./index.js');
 const { execSync } = require("child_process");
 const u = require('ak-tools');
+const { Readable } = require('stream');
+
 
 /** @typedef {import('./index').BatchRequestConfig} Config */
 
@@ -172,47 +174,68 @@ test('shell cmd headers', async () => {
 		url: REQUEST_BIN,
 		data: [{ sampleData: 1 }],
 		dryRun: true,
-		shell: {command: 'echo "Hello World"', header: 'foo', prefix: 'bar'}
+		shell: { command: 'echo "Hello World"', header: 'foo', prefix: 'bar' }
 	};
 
-	const expectedHeaders = {'Content-Type': 'application/json', 'foo': 'bar Hello World'};
+	const expectedHeaders = { 'Content-Type': 'application/json', 'foo': 'bar Hello World' };
 	const result = await main(config);
 	expect(fetch).not.toHaveBeenCalled();
-	expect(result.length).toBe(1);	
-	const {headers} = result[0];
+	expect(result.length).toBe(1);
+	const { headers } = result[0];
 	expect(headers).toEqual(expectedHeaders);
 });
 
 
+test('get requests', async () => {
+	/** @type {Config} */
+	const config = {
+		url: `https://aktunes.com/`,
+		method: 'GET'
+	};
 
-// // Helper function to create a response body that can be read multiple times
-// const createRepeatableResponseBody = (bodyContent) => {
-//     return () => {
-//         const bodyText = typeof bodyContent === 'string' ? bodyContent : JSON.stringify(bodyContent);
-//         return Promise.resolve(bodyText);
-//     };
-// };
+	const result = await main(config);
+	const expected = `<!DOCTYPE HTML>`;
+	expect(result[0].startsWith(expected)).toBe(true);
 
-// // Customizable mock response setup
-// const mockFetchResponse = (body, status = 200, headers = {}) => {
-//     const repeatableBody = createRepeatableResponseBody(body);
-//     return Promise.resolve({
-//         ok: status >= 200 && status < 300,
-//         status: status,
-//         statusText: status >= 200 && status < 300 ? 'OK' : 'Error',
-//         text: repeatableBody,
-//         json: () => Promise.resolve(body),
-//         headers: {
-//             entries: () => Object.entries(headers),
-//         },
-//     });
-// };
-// // Mock implementation
-// fetch.mockImplementation((url, options) => {
-// 	if (url.includes('/api/test-error')) {
-// 		return mockFetchResponse('Error response', 500, { 'Content-Type': 'text/plain' });
-// 	}
+	// expect(fetch).toHaveBeenCalledTimes(1);
+	// expect(result[0]).toHaveProperty('success', true);
+});
 
-// 	// Default response mock
-// 	return mockFetchResponse({ success: true }, 200, { 'Content-Type': 'application/json' });
-// });
+test('streams (object)', async () => {
+	const testData = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }];
+	const inputStream = Readable.from(testData, { objectMode: true });
+
+	/** @type {Config} */
+	const config = {
+		url: REQUEST_BIN,
+		data: inputStream,
+		batchSize: 2,
+		retries: 0  // Ensure it fits the test scenario
+	};
+
+
+	const result = await main(config);
+	expect(result.length).toBe(3);
+
+
+});
+
+test('streams (jsonl)', async () => {
+	const testData = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }].map(item => JSON.stringify(item)).join('\n') + '\n';
+	const inputStream = Readable.from(testData, { objectMode: false });
+
+	/** @type {Config} */
+	const config = {
+		url: REQUEST_BIN,
+		data: inputStream,
+		batchSize: 2,
+		retries: 0  // Ensure it fits the test scenario
+	};
+
+
+	const result = await main(config);
+	expect(result.length).toBe(3);
+
+});
+
+
