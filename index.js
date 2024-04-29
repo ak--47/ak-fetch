@@ -9,9 +9,9 @@ const nativeFetch = global.fetch;
 const fetch = require("fetch-retry")(global.fetch);
 const { execSync } = require('child_process');
 const { Transform } = require('stream');
-const { Agent } = require('https');
 const path = require('path');
-const { createWriteStream } = require('fs');
+const { createReadStream, existsSync } = require('fs');
+
 
 require('dotenv').config({ debug: false, override: false });
 
@@ -35,6 +35,8 @@ require('dotenv').config({ debug: false, override: false });
  * @property {boolean} [keepalive] - use keepalive for the request.
  * @property {ShellConfig} [shell] - shell command to run to get token/secrets, etc....
  * @property {string} [method] - The HTTP method to use for the request.
+ * @property {boolean} [debug] - drop debugger on bad requests
+ * @property {number} [highWaterMark] - The highWaterMark for the stream
  */
 
 /** 
@@ -45,9 +47,16 @@ require('dotenv').config({ debug: false, override: false });
  */
 
 /**
+ * @typedef {Object} Result
+ * @property {Object[]} responses - An array of responses from the API.
+ * @property {number} duration - The duration of the job in milliseconds.
+ * @property {string} clockTime - The duration of the job in human-readable format.
+ */
+
+/**
  * A function to send a batch of POST requests to an API endpoint.
  * @param  {BatchRequestConfig} PARAMS
- * @returns {Promise<Object[]>} - An array of responses from the API.
+ * @returns {Promise<Result>} - An array of responses from the API.
  * @example
  * const jobConfig = { url: "https://api.example.com", data: [{...}, {...}], searchParams: {verbose: "1"} };
  * const responses = await main(jobConfig);
@@ -55,6 +64,7 @@ require('dotenv').config({ debug: false, override: false });
  * 
  */
 async function main(PARAMS) {
+	const startTime = Date.now();
 	const {
 		url = "",
 		batchSize = 1,
@@ -73,7 +83,9 @@ async function main(PARAMS) {
 		timeout = 60000,
 		keepalive = false,
 		shell = undefined,
-		method = "POST"
+		method = "POST",
+		debug = false,
+		highWaterMark = 16384, // 16KB
 	} = PARAMS;
 
 	if (!url) throw new Error("No URL provided");
@@ -82,6 +94,7 @@ async function main(PARAMS) {
 	if (shell) {
 		const commandOutput = execSync(shell.command).toString().trim();
 		headers[shell.header || "Authorization"] = `${shell.prefix || "Bearer"} ${commandOutput}`;
+		PARAMS.headers = headers;
 	}
 
 	const retryConfig = { retries, retryDelay, retryOn, timeout, keepalive };
@@ -91,62 +104,39 @@ async function main(PARAMS) {
 		console.log('\n\tJOB CONFIG:\n', u.json(NON_DATA_PARAMS), '\n');
 	}
 
-	// If data is a stream, process it using a generator
+
+	let batches;
+	let stream;
 	if (data instanceof require('stream').Readable) {
-		let dataProcessor = data;
-		// @ts-ignore
-		if (!data.readableObjectMode) dataProcessor = data.pipe(jsonlToJSON());
-		const dataGenerator = streamToBatches(dataProcessor, batchSize);
-		return processBatchesFromGenerator(dataGenerator, PARAMS, retryConfig);
+		data.readableObjectMode ? stream = data : stream = data.pipe(jsonlToJSON(highWaterMark));
+		batches = streamToBatches(stream, PARAMS.batchSize);
 	}
-
-	const queue = new RunQueue({ maxConcurrency: concurrency });
-
-	const batches = batchData(data, batchSize);
-	const totalReq = batches.length;
-	const responses = [];
-	let count = 0;
-
-	if (verbose && data) console.log(`\n\trecords: ${u.comma(data.length)} requests: ${u.comma(totalReq)} concurrency: ${concurrency} delay: ${delay}ms\n`);
-	else if (verbose) console.log(`\n\trequests: ${u.comma(totalReq)} concurrency: ${concurrency} delay: ${delay}ms\n`);
-
-	batches.forEach((batch, index) => {
-		queue.add(0, async () => {
-			// @ts-ignore
-			const response = await makeHttpRequest(url, batch, searchParams, headers, bodyParams, dryRun, retryConfig, method);
-			count++;
-			responses.push(response);
-			if (delay) await u.sleep(delay);
-
-			// Progress bar
-			// @ts-ignore
-			if (!dryRun) {
-				readline.cursorTo(process.stdout, 0);
-				const msg = `completed ${u.comma(count)} of ${u.comma(totalReq)} requests    ${Math.floor((count) / totalReq * 100)}%\t`;
-				process.stdout.write(`\t${msg}\t`);
-			}
-		});
-	});
-
-	try {
-		await queue.run();
-		console.log("\nAll batches have been processed.\n");
-		if (logFile) {
-			if (dryRun === 'curl') await u.touch(logFile, responses.join("\n\n"), false);
-			else {
-				await u.touch(logFile, responses, true);
-			}
-			console.log(`\n written to ${logFile}`);
+	else if (typeof data === 'string') {
+		if (existsSync(path.resolve(data))) {
+			stream = createReadStream(path.resolve(data), { highWaterMark }).pipe(jsonlToJSON(highWaterMark));
+			batches = streamToBatches(stream, PARAMS.batchSize);
 		}
-		return responses;
-	} catch (error) {
-		console.error("An error occurred:", error);
-		throw error; // Important to propagate the error for handling outside the function
+		else {
+			throw new Error("Invalid data source");
+		}
 	}
+	else if (Array.isArray(data)) batches = batchData(data, PARAMS.batchSize);
+	else if (typeof data === 'object') batches = batchData([data], PARAMS.batchSize);
+	else {
+		if (method?.toUpperCase() !== "GET") throw new Error("Invalid data source");
+	}
+
+
+	const responses = await processBatches(batches, PARAMS, retryConfig);
+	const endTime = Date.now();
+	const duration = endTime - startTime;
+	const clockTime = prettyTime(duration);
+	return { responses, duration, clockTime };
+
 }
 
 
-async function makeHttpRequest(url, data, searchParams = null, headers = { "Content-Type": 'application/json' }, bodyParams, dryRun = false, retryConfig, method = "POST") {
+async function makeHttpRequest(url, data, searchParams = null, headers = { "Content-Type": 'application/json' }, bodyParams, dryRun = false, retryConfig, method = "POST", debug = false) {
 	if (!url) return Promise.resolve("No URL provided");
 	if (!data && method.toUpperCase() !== 'GET') return Promise.resolve("No data provided");
 	if (!headers["Content-Type"]) headers["Content-Type"] = 'application/json';
@@ -230,13 +220,16 @@ async function makeHttpRequest(url, data, searchParams = null, headers = { "Cont
 			nativeFetch(requestUrl, { ...request });
 			return Promise.resolve({ url: requestUrl.toString(), status: "fire and forget", data: payload });
 		}
+		if (method.toUpperCase() === 'GET') delete request.body;
 		const response = await fetch(requestUrl, request);
 
 		// Check for non-2xx responses and log them
 		if (!response.ok) {
 			console.error('Response Status:', response.status);
 			console.error('Response Text:', await response.text());
-			debugger;
+			if (debug) {
+				debugger;
+			}
 		}
 
 		// Extract response headers
@@ -274,6 +267,45 @@ function batchData(data, batchSize, bodyParams = null) {
 }
 
 
+async function processBatches(batches, PARAMS, retryConfig) {
+	let {
+		url, searchParams, headers, bodyParams, dryRun, method, delay, concurrency, logFile, verbose, data, debug = false,
+	} = PARAMS;
+
+	const queue = new RunQueue({ maxConcurrency: concurrency });
+	const totalReq = batches?.length || "streamed";
+	const responses = [];
+	let count = 0;
+
+	if (!batches) batches = [null];
+
+	for await (const batch of batches) {
+		queue.add(0, async () => {
+			const response = await makeHttpRequest(url, batch, searchParams, headers, bodyParams, dryRun, retryConfig, method, debug);
+			responses.push(response);
+			count++;
+			if (delay) await new Promise(r => setTimeout(r, delay));
+
+			// Progress bar
+			if (!dryRun) {
+				readline.cursorTo(process.stdout, 0);
+				const percent = Math.floor(count / totalReq * 100)
+				const msg = `completed ${u.comma(count)} of ${u.comma(totalReq)} requests    ${isNaN(percent) ? "???" : percent}%\t`;
+				process.stdout.write(`\t${msg}\t`);
+			}
+		});
+	}
+
+	await queue.run();
+	console.log("\nAll batches have been processed.\n");
+
+	if (logFile) {
+		await u.touch(logFile, responses, true);
+		console.log(`\n written to ${logFile}`);
+	}
+
+	return responses;
+}
 
 
 
@@ -313,37 +345,14 @@ async function* streamToBatches(dataStream, batchSize) {
 	}
 }
 
-async function processBatchesFromGenerator(dataGenerator, PARAMS, retryConfig) {
-	const queue = new RunQueue({ maxConcurrency: PARAMS.concurrency });
-	const responses = [];
-
-	for await (const batch of dataGenerator) {
-		queue.add(0, async () => {
-			const response = await makeHttpRequest(PARAMS.url, batch, PARAMS.searchParams, PARAMS.headers, PARAMS.bodyParams, PARAMS.dryRun, retryConfig, PARAMS.method);
-			responses.push(response);
-			if (PARAMS.delay) await new Promise(r => setTimeout(r, PARAMS.delay));
-		});
-	}
-
-	await queue.run();
-	console.log("All batches have been processed.");
-
-	if (PARAMS.logFile) {
-		// Assume u.touch logs data to file
-		await u.touch(PARAMS.logFile, responses, true);
-		console.log(`\n written to ${PARAMS.logFile}`);
-	}
-
-	return responses;
-}
-
 
 // Function to transform JSONL to JSON objects
-function jsonlToJSON() {
+function jsonlToJSON(highWaterMark = 16384) {
 	let buffer = '';
 
 	return new Transform({
 		readableObjectMode: true,
+		highWaterMark: highWaterMark,
 		transform(chunk, encoding, callback) {
 			buffer += chunk.toString();
 			let lines = buffer.split('\n');
@@ -374,7 +383,27 @@ function jsonlToJSON() {
 	});
 }
 
+function prettyTime(milliseconds) {
+	let totalSeconds = milliseconds / 1000;
 
+	const levels = [
+		[Math.floor(totalSeconds / 31536000), 'years'],
+		[Math.floor((totalSeconds % 31536000) / 86400), 'days'],
+		[Math.floor(((totalSeconds % 31536000) % 86400) / 3600), 'hours'],
+		[Math.floor((((totalSeconds % 31536000) % 86400) % 3600) / 60), 'minutes']
+	];
+
+	let seconds = (totalSeconds % 60).toFixed(2);  // Round seconds to two decimal places
+	levels.push([seconds, 'seconds']);  // Add seconds to levels array
+
+	let result = '';
+
+	for (let i = 0, max = levels.length; i < max; i++) {
+		if (levels[i][0] == 0 || (i === max - 1 && levels[i][0] == "0.00")) continue;
+		result += ` ${levels[i][0]} ${levels[i][0] === 1 ? levels[i][1].slice(0, -1) : levels[i][1]}`;
+	}
+	return result.trim();
+}
 
 // main.download = download;
 // main.upload = upload;

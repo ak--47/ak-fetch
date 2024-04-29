@@ -45,11 +45,12 @@ test('fire and forget', async () => {
 	const config = {
 		url: REQUEST_BIN,
 		data: [{}, {}, {}],
-		retries: null
+		retries: null,
+		batchSize: 1
 	};
 	const result = await main(config);
 	const expected = Array.from({ length: 3 }, () => ({ url: REQUEST_BIN, data: {}, status: "fire and forget" }));
-	expect(result).toEqual(expected);
+	expect(result.responses).toEqual(expected);
 });
 
 test('batches', async () => {
@@ -65,7 +66,7 @@ test('batches', async () => {
 		batchSize: 2
 	};
 	const result = await main(config);
-	expect(result.length).toBe(2);
+	expect(result.responses.length).toBe(2);
 });
 
 
@@ -80,7 +81,7 @@ test('batches also', async () => {
 		batchSize: 2
 	};
 	const result = await main(config);
-	expect(result.length).toBe(2);
+	expect(result.responses.length).toBe(2);
 });
 
 test('content types', async () => {
@@ -93,7 +94,7 @@ test('content types', async () => {
 		headers: { "Content-Type": 'application/json' },
 	};
 	const resultJson = await main(configJson);
-	expect(resultJson[0]).toHaveProperty('success', true);
+	expect(resultJson.responses[0]).toHaveProperty('success', true);
 
 	fetch.mockImplementationOnce(() => mockFetchResponse({ success: true }));
 
@@ -104,7 +105,7 @@ test('content types', async () => {
 		headers: { "Content-Type": 'application/x-www-form-urlencoded' },
 	};
 	const resultForm = await main(configForm);
-	expect(resultForm[0]).toHaveProperty('success', true);
+	expect(resultForm.responses[0]).toHaveProperty('success', true);
 });
 
 test('dry runs', async () => {
@@ -112,11 +113,12 @@ test('dry runs', async () => {
 	const config = {
 		url: REQUEST_BIN,
 		data: [{ sampleData: 1 }, { sampleData: 2 }],
-		dryRun: true
+		dryRun: true,
+		batchSize: 1
 	};
 	const result = await main(config);
 	expect(fetch).not.toHaveBeenCalled();
-	expect(result.length).toBe(2);
+	expect(result.responses.length).toBe(2);
 });
 
 test('curl', async () => {
@@ -126,7 +128,8 @@ test('curl', async () => {
 		url: REQUEST_BIN,
 		data: sampleData,
 		headers: { "Content-Type": 'application/json' },
-		dryRun: "curl"
+		dryRun: "curl",
+		batchSize: 1
 	};
 
 	const expectedCurlCommand = `curl -X POST "${REQUEST_BIN}" \\\n` +
@@ -134,7 +137,7 @@ test('curl', async () => {
 		` -d '{"id":1,"name":"Test"}'`;
 
 	const result = await main(config);
-	expect(result[0]).toBe(expectedCurlCommand);
+	expect(result.responses[0]).toBe(expectedCurlCommand);
 });
 
 const logPath = './logs/test.log';
@@ -174,14 +177,15 @@ test('shell cmd headers', async () => {
 		url: REQUEST_BIN,
 		data: [{ sampleData: 1 }],
 		dryRun: true,
-		shell: { command: 'echo "Hello World"', header: 'foo', prefix: 'bar' }
+		shell: { command: 'echo "Hello World"', header: 'foo', prefix: 'bar' },
+		batchSize: 1
 	};
 
 	const expectedHeaders = { 'Content-Type': 'application/json', 'foo': 'bar Hello World' };
 	const result = await main(config);
 	expect(fetch).not.toHaveBeenCalled();
-	expect(result.length).toBe(1);
-	const { headers } = result[0];
+	expect(result.responses.length).toBe(1);
+	const { headers } = result.responses[0];
 	expect(headers).toEqual(expectedHeaders);
 });
 
@@ -195,7 +199,7 @@ test('get requests', async () => {
 
 	const result = await main(config);
 	const expected = `<!DOCTYPE HTML>`;
-	expect(result[0].startsWith(expected)).toBe(true);
+	expect(result.responses[0].startsWith(expected)).toBe(true);
 
 	// expect(fetch).toHaveBeenCalledTimes(1);
 	// expect(result[0]).toHaveProperty('success', true);
@@ -215,7 +219,7 @@ test('streams (object)', async () => {
 
 
 	const result = await main(config);
-	expect(result.length).toBe(3);
+	expect(result.responses.length).toBe(3);
 
 
 });
@@ -234,8 +238,35 @@ test('streams (jsonl)', async () => {
 
 
 	const result = await main(config);
-	expect(result.length).toBe(3);
+	expect(result.responses.length).toBe(3);
 
 });
 
+test('streams (path)', async () => {
+	const testData = './testData/testEvents.jsonl';
+
+	/** @type {Config} */
+	const config = {
+		batchSize: 10,
+		url: "https://api.mixpanel.com/import",
+		concurrency: 3,
+		headers: { "Content-Type": "application/json", 'accept': 'application/json', 'authorization': `Basic ${Buffer.from(`542871939159895ac55a18d3c90c198b:`).toString("base64")}` },
+		verbose: false,
+		retries: 3,
+		retryOn: [429, 500, 502, 503, 504],
+		searchParams: { verbose: 1 },
+		data: testData,
+	};
+
+
+	const result = await main(config);
+	expect(result.responses.length).toBe(10);
+	expect(result.responses.every(r => r.code === 200)).toBe(true);
+	expect(result.responses.every(r => r.error === null)).toBe(true);
+	expect(result.responses.every(r => r.num_records_imported === 10)).toBe(true);
+	expect(result.responses.every(r => r.status === 1)).toBe(true);
+
+	// expect(result.responses.length).toBe(3);
+
+});
 
