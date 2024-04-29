@@ -127,11 +127,13 @@ async function main(PARAMS) {
 	}
 
 
-	const responses = await processBatches(batches, PARAMS, retryConfig);
+	const [responses = [], reqCount = 0, rowCount = 0] = await processBatches(batches, PARAMS, retryConfig);
 	const endTime = Date.now();
 	const duration = endTime - startTime;
 	const clockTime = prettyTime(duration);
-	return { responses, duration, clockTime };
+	// @ts-ignore
+	const rps = Math.floor(reqCount / (duration / 1000));
+	return { responses, duration, clockTime, reqCount, rowCount, rps };
 
 }
 
@@ -275,7 +277,8 @@ async function processBatches(batches, PARAMS, retryConfig) {
 	const queue = new RunQueue({ maxConcurrency: concurrency });
 	const totalReq = batches?.length || "streamed";
 	const responses = [];
-	let count = 0;
+	let requestCount = 0;
+	let rowCount = 0;
 
 	if (!batches) batches = [null];
 
@@ -283,14 +286,15 @@ async function processBatches(batches, PARAMS, retryConfig) {
 		queue.add(0, async () => {
 			const response = await makeHttpRequest(url, batch, searchParams, headers, bodyParams, dryRun, retryConfig, method, debug);
 			responses.push(response);
-			count++;
+			requestCount++;
+			rowCount += batch?.length || 1;
 			if (delay) await new Promise(r => setTimeout(r, delay));
 
 			// Progress bar
 			if (!dryRun) {
 				readline.cursorTo(process.stdout, 0);
-				const percent = Math.floor(count / totalReq * 100)
-				const msg = `completed ${u.comma(count)} of ${u.comma(totalReq)} requests    ${isNaN(percent) ? "???" : percent}%\t`;
+				const percent = Math.floor(requestCount / totalReq * 100);
+				const msg = `completed ${u.comma(requestCount)} of ${u.comma(totalReq)} requests    ${isNaN(percent) ? "???" : percent}%\t`;
 				process.stdout.write(`\t${msg}\t`);
 			}
 		});
@@ -304,7 +308,7 @@ async function processBatches(batches, PARAMS, retryConfig) {
 		console.log(`\n written to ${logFile}`);
 	}
 
-	return responses;
+	return [responses, requestCount, rowCount];
 }
 
 
@@ -400,6 +404,7 @@ function prettyTime(milliseconds) {
 
 	for (let i = 0, max = levels.length; i < max; i++) {
 		if (levels[i][0] == 0 || (i === max - 1 && levels[i][0] == "0.00")) continue;
+		// @ts-ignore
 		result += ` ${levels[i][0]} ${levels[i][0] === 1 ? levels[i][1].slice(0, -1) : levels[i][1]}`;
 	}
 	return result.trim();
