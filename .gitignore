@@ -1,6 +1,10 @@
 # projects
 amc/*
 
+scratch.mjs
+testData/*
+!testData/.gitkeep
+
 # Logs
 logs/*
 !logs/.gitkeep

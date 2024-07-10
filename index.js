@@ -18,13 +18,13 @@ require('dotenv').config({ debug: false, override: false });
 /**
  * @typedef {Object} BatchRequestConfig
  * @property {string} url - The URL of the API endpoint.
- * @property {Object[]} data - An array of data objects to be sent in the requests.
- * @property {number} batchSize - The number of records to be sent in each batch. Use batch = 0 to not batch.
- * @property {number} concurrency - The level of concurrency for the requests.
- * @property {number} delay - The delay between requests.
- * @property {Object|null} searchParams - An object representing the search parameters to be appended to the URL.
- * @property {Object|null} bodyParams - An object representing the body parameters to be sent in the request.
- * @property {Object} headers - An object representing the headers to be sent in the request.
+ * @property {Object[] & string & import('stream').Readable & any} data - An array of data objects, readable stream, or jsonl file to be sent in the requests.
+ * @property {number} [batchSize] - The number of records to be sent in each batch. Use batch = 0 to not batch.
+ * @property {number} [concurrency] - The level of concurrency for the requests.
+ * @property {number} [delay] - The delay between requests.
+ * @property {Object|null} [searchParams] - An object representing the search parameters to be appended to the URL.
+ * @property {Object|null} [bodyParams] - An object representing the body parameters to be sent in the request.
+ * @property {Object} [headers] - An object representing the headers to be sent in the request.
  * @property {boolean} [verbose] - Log progress of the requests.
  * @property {boolean | string} [dryRun] - Don't actually make requests.
  * @property {string} [logFile] - If specified, responses will be saved to a file.
@@ -133,10 +133,10 @@ async function main(PARAMS) {
 	const clockTime = prettyTime(duration);
 	// @ts-ignore
 	const rps = Math.floor(reqCount / (duration / 1000));
+	// @ts-ignore
 	return { responses, duration, clockTime, reqCount, rowCount, rps };
 
 }
-
 
 async function makeHttpRequest(url, data, searchParams = null, headers = { "Content-Type": 'application/json' }, bodyParams, dryRun = false, retryConfig, method = "POST", debug = false) {
 	if (!url) return Promise.resolve("No URL provided");
@@ -227,11 +227,13 @@ async function makeHttpRequest(url, data, searchParams = null, headers = { "Cont
 
 		// Check for non-2xx responses and log them
 		if (!response.ok) {
-			console.error('Response Status:', response.status);
-			console.error('Response Text:', await response.text());
+			console.error('ERROR: Response Status:', response.status);
+			const body = await response.text();
+			// console.error('Response Text:', await response.text());
 			if (debug) {
 				debugger;
 			}
+			return { status: response.status, statusText: response.statusText, body };
 		}
 
 		// Extract response headers
@@ -268,7 +270,6 @@ function batchData(data, batchSize, bodyParams = null) {
 	return batches;
 }
 
-
 async function processBatches(batches, PARAMS, retryConfig) {
 	let {
 		url, searchParams, headers, bodyParams, dryRun, method, delay, concurrency, logFile, verbose, data, debug = false,
@@ -291,26 +292,42 @@ async function processBatches(batches, PARAMS, retryConfig) {
 			if (delay) await new Promise(r => setTimeout(r, delay));
 
 			// Progress bar
-			if (!dryRun) {
+			if (!dryRun && verbose) {
 				readline.cursorTo(process.stdout, 0);
+				readline.clearLine(process.stdout, 0);
 				const percent = Math.floor(requestCount / totalReq * 100);
-				const msg = `completed ${u.comma(requestCount)} of ${u.comma(totalReq)} requests    ${isNaN(percent) ? "???" : percent}%\t`;
+				const msg = `completed ${u.comma(requestCount)} of ${u.comma(totalReq)} requests    ${isNaN(percent) ? "?" : percent}%\t`;
 				process.stdout.write(`\t${msg}\t`);
 			}
 		});
 	}
 
 	await queue.run();
-	console.log("\nAll batches have been processed.\n");
+	if (verbose) console.log("\nAll batches have been processed.\n");
 
 	if (logFile) {
 		await u.touch(logFile, responses, true);
-		console.log(`\n written to ${logFile}`);
+		if (verbose) console.log(`\n written to ${logFile}`);
 	}
 
 	return [responses, requestCount, rowCount];
 }
 
+async function* streamToBatches(dataStream, batchSize) {
+	let batch = [];
+
+	for await (const data of dataStream) {
+		batch.push(data);
+		if (batch.length >= batchSize) {
+			yield batch;
+			batch = [];
+		}
+	}
+
+	if (batch.length > 0) {
+		yield batch;  // Yield any remaining items as the last batch
+	}
+}
 
 
 // this is for CLI
@@ -333,21 +350,6 @@ if (require.main === module) {
 }
 
 
-async function* streamToBatches(dataStream, batchSize) {
-	let batch = [];
-
-	for await (const data of dataStream) {
-		batch.push(data);
-		if (batch.length >= batchSize) {
-			yield batch;
-			batch = [];
-		}
-	}
-
-	if (batch.length > 0) {
-		yield batch;  // Yield any remaining items as the last batch
-	}
-}
 
 
 // Function to transform JSONL to JSON objects
