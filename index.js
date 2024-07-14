@@ -1,6 +1,6 @@
 #! /usr/bin/env node
 const RunQueue = require("run-queue");
-const u = require("ak-tools");
+const { json, isJSONStr, comma, touch, clone: cloneObj } = require("ak-tools");
 const readline = require('readline');
 const querystring = require('querystring');
 const cli = require('./cli');
@@ -8,9 +8,10 @@ const nativeFetch = global.fetch;
 // @ts-ignore
 const fetch = require("fetch-retry")(global.fetch);
 const { execSync } = require('child_process');
-const { Transform } = require('stream');
+const { Transform, Readable } = require('stream');
 const path = require('path');
 const { createReadStream, existsSync } = require('fs');
+
 
 
 require('dotenv').config({ debug: false, override: false });
@@ -37,6 +38,10 @@ require('dotenv').config({ debug: false, override: false });
  * @property {string} [method] - The HTTP method to use for the request.
  * @property {boolean} [debug] - drop debugger on bad requests
  * @property {number} [highWaterMark] - The highWaterMark for the stream
+ * @property {function} [transform] - A function to transform the data before sending it.
+ * @property {function} [errorHandler] - A function to handle errors.
+ * @property {function} [responseHandler] - A function passed each response.
+ * @property {boolean} [clone] - Clone the data before sending it (useful if using transform).
  */
 
 /** 
@@ -86,6 +91,10 @@ async function main(PARAMS) {
 		method = "POST",
 		debug = false,
 		highWaterMark = 16384, // 16KB
+		transform = undefined,
+		errorHandler = undefined,
+		responseHandler = undefined,
+		clone = false
 	} = PARAMS;
 
 	if (!url) throw new Error("No URL provided");
@@ -101,7 +110,7 @@ async function main(PARAMS) {
 
 	if (verbose) {
 		const { data, ...NON_DATA_PARAMS } = PARAMS;
-		console.log('\n\tJOB CONFIG:\n', u.json(NON_DATA_PARAMS), '\n');
+		console.log('\n\tJOB CONFIG:\n', json(NON_DATA_PARAMS), '\n');
 	}
 
 
@@ -116,12 +125,34 @@ async function main(PARAMS) {
 			stream = createReadStream(path.resolve(data), { highWaterMark }).pipe(jsonlToJSON(highWaterMark));
 			batches = streamToBatches(stream, PARAMS.batchSize);
 		}
+		else if (isJSONStr(data)) {
+			stream = Readable.from(JSON.parse(data));
+			batches = streamToBatches(stream, PARAMS.batchSize);
+
+		}
+		else if (isJSONStr(data?.split('\n')?.pop() || "")) {
+			stream = Readable.from(data).pipe(jsonlToJSON(highWaterMark));
+			batches = streamToBatches(stream, PARAMS.batchSize);
+		}
 		else {
 			throw new Error("Invalid data source");
 		}
 	}
-	else if (Array.isArray(data)) batches = batchData(data, PARAMS.batchSize);
-	else if (typeof data === 'object') batches = batchData([data], PARAMS.batchSize);
+	else if (Array.isArray(data)) {
+		// if (Array.isArray(data[0])) {
+		// 	batches = batchData(data, PARAMS.batchSize);
+		// }
+		// else {
+		// 	batches = batchData(data], PARAMS.batchSize);
+		// }
+		stream = Readable.from(data);
+		batches = streamToBatches(stream, PARAMS.batchSize);
+
+	}
+	else if (typeof data === 'object') {
+		stream = Readable.from([data]);
+		batches = streamToBatches(stream, PARAMS.batchSize);
+	}
 	else {
 		if (method?.toUpperCase() !== "GET") throw new Error("Invalid data source");
 	}
@@ -138,7 +169,7 @@ async function main(PARAMS) {
 
 }
 
-async function makeHttpRequest(url, data, searchParams = null, headers = { "Content-Type": 'application/json' }, bodyParams, dryRun = false, retryConfig, method = "POST", debug = false) {
+async function makeHttpRequest(url, data, searchParams = null, headers = { "Content-Type": 'application/json' }, bodyParams, dryRun = false, retryConfig, method = "POST", debug = false, transform, clone, errorHandler, verbose, responseHandler) {
 	if (!url) return Promise.resolve("No URL provided");
 	if (!data && method.toUpperCase() !== 'GET') return Promise.resolve("No data provided");
 	if (!headers["Content-Type"]) headers["Content-Type"] = 'application/json';
@@ -150,6 +181,40 @@ async function makeHttpRequest(url, data, searchParams = null, headers = { "Cont
 		let params = new URLSearchParams(searchParams);
 		// @ts-ignore
 		requestUrl.search = params;
+	}
+
+	let dataToSend = null;
+	if (Array.isArray(data) && Array.isArray(data[0])) {
+		dataToSend = data[0];
+
+	}
+	else {
+		dataToSend = data;
+	}
+	const payloadData = clone ? cloneObj(dataToSend) : dataToSend;
+
+	if (transform) {
+		payloadData.forEach(async (record) => {
+			try {
+				record = await transform(record);
+			}
+			catch (error) {
+				if (debug) {
+					debugger;
+				}
+			}
+
+			try {
+				while (typeof record === 'function') {
+					record = await transform(record);
+				}
+			}
+			catch (error) {
+				if (debug) {
+					debugger;
+				}
+			};
+		});
 	}
 
 
@@ -170,24 +235,24 @@ async function makeHttpRequest(url, data, searchParams = null, headers = { "Cont
 
 		if (headers?.["Content-Type"] === 'application/x-www-form-urlencoded') {
 			if (bodyParams?.["dataKey"]) {
-				payload = { [bodyParams["dataKey"]]: JSON.stringify(data), ...bodyParams };
+				payload = { [bodyParams["dataKey"]]: JSON.stringify(payloadData), ...bodyParams };
 				delete payload.dataKey;
 			}
 			else {
-				payload = { ...bodyParams, ...data };
+				payload = { ...bodyParams, ...payloadData };
 			}
 			request.body = querystring.stringify(payload);
 		}
 
 		else if (bodyParams) {
-			payload = { [bodyParams["dataKey"]]: data, ...bodyParams };
+			payload = { [bodyParams["dataKey"]]: payloadData, ...bodyParams };
 			delete payload.dataKey;
 			request.body = JSON.stringify(payload);
 		}
 
 		else {
 			payload = data;
-			request.body = JSON.stringify(data);
+			request.body = JSON.stringify(payloadData);
 		}
 
 		if (dryRun) {
@@ -214,7 +279,7 @@ async function makeHttpRequest(url, data, searchParams = null, headers = { "Cont
 				return curlCommand;
 			}
 
-			console.log(`url: ${requestUrl}\nbody: ${u.json(payload || data)}`);
+			console.log(`url: ${requestUrl}\nbody: ${json(payload || data)}`);
 			return request;
 		}
 		if (isFireAndForget) {
@@ -227,13 +292,21 @@ async function makeHttpRequest(url, data, searchParams = null, headers = { "Cont
 
 		// Check for non-2xx responses and log them
 		if (!response.ok) {
-			console.error('ERROR: Response Status:', response.status);
-			const body = await response.text();
-			// console.error('Response Text:', await response.text());
+			if (verbose) {
+				console.error('ERROR: Response Status:', response.status, 'Status Text:', response.statusText);
+			}
+			let body = await response.text();
+			if (isJSONStr(body)) body = JSON.parse(body);
 			if (debug) {
 				debugger;
 			}
-			return { status: response.status, statusText: response.statusText, body };
+			if (errorHandler) {
+				errorHandler({ status: response.status, statusText: response.statusText, body });
+				return { status: response.status, statusText: response.statusText, body };
+			}
+			if (!errorHandler) {
+				throw new Error(`ERROR: Response Status: ${response.status}`, { cause: { status: response.status, statusText: response.statusText, body } });
+			}
 		}
 
 		// Extract response headers
@@ -242,9 +315,17 @@ async function makeHttpRequest(url, data, searchParams = null, headers = { "Cont
 		const statusText = response.statusText;
 
 		let responseBody = await response.text();
-		if (u.isJSONStr(responseBody)) return JSON.parse(responseBody);
-		else if (responseBody === "" || responseBody === "0") return { status, statusText, ...resHeaders };
-		else return responseBody;
+		let result;
+		if (isJSONStr(responseBody)) result = JSON.parse(responseBody);
+		else if (responseBody === "" || responseBody === "0") result = { status, statusText, ...resHeaders };
+		else result = responseBody;
+
+		if (responseHandler) {
+			if (typeof responseHandler === 'function') {
+				responseHandler(result);
+			}
+		}
+		return result;
 
 	} catch (error) {
 		console.error("Error making POST request:", error);
@@ -253,26 +334,25 @@ async function makeHttpRequest(url, data, searchParams = null, headers = { "Cont
 	}
 }
 
-function batchData(data, batchSize, bodyParams = null) {
-	if (batchSize === 0) return data;
-	if (Array.isArray(data) === false) return [data];
-	const batches = [];
-	for (let i = 0; i < data.length; i += batchSize) {
-		if (batchSize === 1) {
-			let batch = data[i];
-			batches.push(batch);
-		}
-		else {
-			let batch = data.slice(i, i + batchSize);
-			batches.push(batch);
-		}
-	}
-	return batches;
-}
 
 async function processBatches(batches, PARAMS, retryConfig) {
 	let {
-		url, searchParams, headers, bodyParams, dryRun, method, delay, concurrency, logFile, verbose, data, debug = false,
+		url,
+		searchParams,
+		headers,
+		bodyParams,
+		dryRun,
+		method,
+		delay,
+		concurrency,
+		logFile,
+		verbose,
+		data,
+		debug = false,
+		transform,
+		errorHandler,
+		clone,
+		responseHandler
 	} = PARAMS;
 
 	const queue = new RunQueue({ maxConcurrency: concurrency });
@@ -285,7 +365,7 @@ async function processBatches(batches, PARAMS, retryConfig) {
 
 	for await (const batch of batches) {
 		queue.add(0, async () => {
-			const response = await makeHttpRequest(url, batch, searchParams, headers, bodyParams, dryRun, retryConfig, method, debug);
+			const response = await makeHttpRequest(url, batch, searchParams, headers, bodyParams, dryRun, retryConfig, method, debug, transform, clone, errorHandler, verbose, responseHandler);
 			responses.push(response);
 			requestCount++;
 			rowCount += batch?.length || 1;
@@ -296,7 +376,7 @@ async function processBatches(batches, PARAMS, retryConfig) {
 				readline.cursorTo(process.stdout, 0);
 				readline.clearLine(process.stdout, 0);
 				const percent = Math.floor(requestCount / totalReq * 100);
-				const msg = `completed ${u.comma(requestCount)} of ${u.comma(totalReq)} requests    ${isNaN(percent) ? "?" : percent}%\t`;
+				const msg = `completed ${comma(requestCount)} of ${comma(totalReq)} requests    ${isNaN(percent) ? "?" : percent}%\t`;
 				process.stdout.write(`\t${msg}\t`);
 			}
 		});
@@ -306,7 +386,7 @@ async function processBatches(batches, PARAMS, retryConfig) {
 	if (verbose) console.log("\nAll batches have been processed.\n");
 
 	if (logFile) {
-		await u.touch(logFile, responses, true);
+		await touch(logFile, responses, true);
 		if (verbose) console.log(`\n written to ${logFile}`);
 	}
 
@@ -336,7 +416,7 @@ if (require.main === module) {
 		// @ts-ignore
 		main(params)
 			.then((results) => {
-				if (params.verbose) console.log('\n\nRESULTS:\n\n', u.json(results));
+				if (params.verbose) console.log('\n\nRESULTS:\n\n', json(results));
 			})
 			.catch((e) => {
 				console.log('\n\nUH OH! something went wrong; the error is:\n\n');
@@ -412,7 +492,5 @@ function prettyTime(milliseconds) {
 	return result.trim();
 }
 
-// main.download = download;
-// main.upload = upload;
 module.exports = main;
 

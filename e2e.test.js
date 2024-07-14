@@ -49,7 +49,7 @@ test('fire and forget', async () => {
 		batchSize: 1
 	};
 	const result = await main(config);
-	const expected = Array.from({ length: 3 }, () => ({ url: REQUEST_BIN, data: {}, status: "fire and forget" }));
+	const expected = [{}, {}, {}].map(a => { return { url: REQUEST_BIN, data: [{}], status: "fire and forget" }; });
 	expect(result.responses).toEqual(expected);
 });
 
@@ -134,7 +134,7 @@ test('curl', async () => {
 
 	const expectedCurlCommand = `curl -X POST "${REQUEST_BIN}" \\\n` +
 		` -H "Content-Type: application/json" \\\n` +
-		` -d '{"id":1,"name":"Test"}'`;
+		` -d '[{"id":1,"name":"Test"}]'`;
 
 	const result = await main(config);
 	expect(result.responses[0]).toBe(expectedCurlCommand);
@@ -269,4 +269,204 @@ test('streams (path)', async () => {
 	// expect(result.responses.length).toBe(3);
 
 });
+
+
+
+test('transform mutates', async () => {
+	const sampleData = [{ id: 1 }, { id: 2 }];
+
+	/** @type {Config} */
+	const config = {
+		url: REQUEST_BIN,
+		data: sampleData,
+		transform: (record) => {
+			record.transformed = true;
+			return record;
+		},
+		batchSize: 1,
+	};
+
+	const result = await main(config);
+	expect(sampleData.every(r => r.transformed)).toBe(true);
+	result.responses.forEach(response => {
+		expect(response).toHaveProperty('success', true);
+	});
+});
+
+test('transform can clone', async () => {
+	const sampleData = [{ id: 1 }, { id: 2 }];
+
+	/** @type {Config} */
+	const config = {
+		url: REQUEST_BIN,
+		data: sampleData,
+		clone: true,
+		transform: (record) => {
+			record.transformed = true;
+			return record;
+		},
+		batchSize: 1,
+	};
+
+	const result = await main(config);
+	expect(sampleData.every(r => r.transformed)).toBe(false);
+	result.responses.forEach(response => {
+		expect(response).toHaveProperty('success', true);
+	});
+});
+
+test('transform noop', async () => {
+	const sampleData = [{ id: 1 }, { id: 2 }];
+	const copy = [...sampleData];
+
+	/** @type {Config} */
+	const config = {
+		url: REQUEST_BIN,
+		data: sampleData,
+		transform: (record) => record,  // No transformation
+		batchSize: 1,
+	};
+
+	const result = await main(config);
+	expect(sampleData).toEqual(copy);
+	result.responses.forEach(response => {
+		expect(response).toHaveProperty('success', true);
+	});
+});
+
+test('transform async', async () => {
+	const sampleData = [{ id: 1 }, { id: 2 }];
+
+	/** @type {Config} */
+	const config = {
+		url: REQUEST_BIN,
+		data: sampleData,
+		transform: async (record) => {
+			record.transformed = true;
+			return await record;
+		},
+		batchSize: 1,
+	};
+
+	const result = await main(config);
+	expect(sampleData.every(r => r.transformed)).toBe(true);
+	result.responses.forEach(response => {
+		expect(response).toHaveProperty('success', true);
+	});
+});
+
+
+test('transform non-object', async () => {
+	const sampleData = [1, 2, 3];
+
+	/** @type {Config} */
+	const config = {
+		url: REQUEST_BIN,
+		data: sampleData,
+		transform: (record) => record * 2,
+		batchSize: 1,
+	};
+
+	const result = await main(config);
+
+	result.responses.forEach(response => {
+		expect(response).toHaveProperty('success', true);
+	});
+});
+
+
+
+test('big data', async () => {
+	fetch.mockResolvedValue({
+		ok: true,
+		json: () => Promise.resolve({ success: true }),
+	});
+
+	const largeDataSet = Array.from({ length: 1000 }, (_, i) => ({ id: i }));
+
+	/** @type {Config} */
+	const config = {
+		url: REQUEST_BIN,
+		data: largeDataSet,
+		batchSize: 100,
+		concurrency: 10,
+	};
+
+	const result = await main(config);
+	expect(result.responses.length).toBe(10);
+});
+
+
+test('high concurrency', async () => {
+	fetch.mockResolvedValue({
+		ok: true,
+		json: () => Promise.resolve({ success: true }),
+	});
+
+	/** @type {Config} */
+	const config = {
+		url: REQUEST_BIN,
+		data: Array.from({ length: 100 }, (_, i) => ({ id: i })),
+		concurrency: 50,
+		batchSize: 10,
+	};
+
+	const result = await main(config);
+	expect(result.responses.length).toBe(10);
+});
+
+
+test('application/json', async () => {
+	fetch.mockResolvedValue({
+		ok: true,
+		json: () => Promise.resolve({ success: true }),
+	});
+
+	/** @type {Config} */
+	const config = {
+		url: REQUEST_BIN,
+		data: [{ sampleData: 1 }],
+		headers: { "Content-Type": 'application/json' },
+	};
+
+	const result = await main(config);
+	expect(result.responses[0]).toHaveProperty('success', true);
+});
+
+test('application/x-www-form-urlencoded', async () => {
+	fetch.mockResolvedValue({
+		ok: true,
+		json: () => Promise.resolve({ success: true }),
+	});
+
+	/** @type {Config} */
+	const config = {
+		url: REQUEST_BIN,
+		data: [{ sampleData: 1 }],
+		headers: { "Content-Type": 'application/x-www-form-urlencoded' },
+	};
+
+	const result = await main(config);
+	expect(result.responses[0]).toHaveProperty('success', true);
+});
+
+
+test('shell headers', async () => {
+	/** @type {Config} */
+	const config = {
+		url: REQUEST_BIN,
+		data: [{ sampleData: 1 }],
+		shell: { command: 'echo "token123"', header: 'Authorization', prefix: 'Bearer' },
+		dryRun: true,
+		batchSize: 1
+	};
+
+	const result = await main(config);
+	expect(fetch).not.toHaveBeenCalled();
+	expect(result.responses[0].headers).toEqual(expect.objectContaining({
+		'Content-Type': 'application/json',
+		'Authorization': 'Bearer token123'
+	}));
+});
+
 
