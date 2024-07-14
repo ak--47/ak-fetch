@@ -191,30 +191,16 @@ async function makeHttpRequest(url, data, searchParams = null, headers = { "Cont
 	else {
 		dataToSend = data;
 	}
-	const payloadData = clone ? cloneObj(dataToSend) : dataToSend;
+	let payloadData = clone ? cloneObj(dataToSend) : dataToSend;
 
 	if (transform) {
-		payloadData.forEach((record) => {
-			try {
-				record = transform(record);
-			}
-			catch (error) {
-				if (debug) {
-					debugger;
-				}
-			}
+		try {
+			payloadData = payloadData.map(transform);
 
-			try {
-				while (typeof record === 'function') {
-					record = transform(record);
-				}
-			}
-			catch (error) {
-				if (debug) {
-					debugger;
-				}
-			};
-		});
+		}
+		catch (error) {
+			// ?
+		}
 	}
 
 
