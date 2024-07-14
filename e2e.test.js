@@ -334,27 +334,6 @@ test('transform noop', async () => {
 	});
 });
 
-test('transform async', async () => {
-	const sampleData = [{ id: 1 }, { id: 2 }];
-
-	/** @type {Config} */
-	const config = {
-		url: REQUEST_BIN,
-		data: sampleData,
-		transform: async (record) => {
-			record.transformed = true;
-			return await record;
-		},
-		batchSize: 1,
-	};
-
-	const result = await main(config);
-	expect(sampleData.every(r => r.transformed)).toBe(true);
-	result.responses.forEach(response => {
-		expect(response).toHaveProperty('success', true);
-	});
-});
-
 
 test('transform non-object', async () => {
 	const sampleData = [1, 2, 3];

@@ -194,9 +194,9 @@ async function makeHttpRequest(url, data, searchParams = null, headers = { "Cont
 	const payloadData = clone ? cloneObj(dataToSend) : dataToSend;
 
 	if (transform) {
-		payloadData.forEach(async (record) => {
+		payloadData.forEach((record) => {
 			try {
-				record = await transform(record);
+				record = transform(record);
 			}
 			catch (error) {
 				if (debug) {
@@ -206,7 +206,7 @@ async function makeHttpRequest(url, data, searchParams = null, headers = { "Cont
 
 			try {
 				while (typeof record === 'function') {
-					record = await transform(record);
+					record = transform(record);
 				}
 			}
 			catch (error) {
