@@ -41,6 +41,7 @@ require('dotenv').config({ debug: false, override: false });
  * @property {function} [transform] - A function to transform the data before sending it.
  * @property {function} [errorHandler] - A function to handle errors.
  * @property {function} [responseHandler] - A function passed each response.
+ * @property {boolean} [storeResponses] - Store the responses
  * @property {boolean} [clone] - Clone the data before sending it (useful if using transform).
  */
 
@@ -94,7 +95,8 @@ async function main(PARAMS) {
 		transform = undefined,
 		errorHandler = undefined,
 		responseHandler = undefined,
-		clone = false
+		clone = false,
+		storeResponses = true
 	} = PARAMS;
 
 	if (!url) throw new Error("No URL provided");
@@ -157,8 +159,8 @@ async function main(PARAMS) {
 		if (method?.toUpperCase() !== "GET") throw new Error("Invalid data source");
 	}
 
-
 	const [responses = [], reqCount = 0, rowCount = 0] = await processBatches(batches, PARAMS, retryConfig);
+	if (stream) stream.removeAllListeners()
 	const endTime = Date.now();
 	const duration = endTime - startTime;
 	const clockTime = prettyTime(duration);
@@ -287,8 +289,7 @@ async function makeHttpRequest(url, data, searchParams = null, headers = { "Cont
 				debugger;
 			}
 			if (errorHandler) {
-				errorHandler({ status: response.status, statusText: response.statusText, body });
-				return { status: response.status, statusText: response.statusText, body };
+				return errorHandler({ status: response.status, statusText: response.statusText, body });
 			}
 			if (!errorHandler) {
 				throw new Error(`ERROR: Response Status: ${response.status}`, { cause: { status: response.status, statusText: response.statusText, body } });
@@ -338,7 +339,8 @@ async function processBatches(batches, PARAMS, retryConfig) {
 		transform,
 		errorHandler,
 		clone,
-		responseHandler
+		responseHandler,
+		storeResponses = true
 	} = PARAMS;
 
 	const queue = new RunQueue({ maxConcurrency: concurrency });
@@ -352,7 +354,7 @@ async function processBatches(batches, PARAMS, retryConfig) {
 	for await (const batch of batches) {
 		queue.add(0, async () => {
 			const response = await makeHttpRequest(url, batch, searchParams, headers, bodyParams, dryRun, retryConfig, method, debug, transform, clone, errorHandler, verbose, responseHandler);
-			responses.push(response);
+			if (storeResponses) responses.push(response);
 			requestCount++;
 			rowCount += batch?.length || 1;
 			if (delay) await new Promise(r => setTimeout(r, delay));

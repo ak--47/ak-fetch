@@ -1,6 +1,6 @@
 {
   "name": "ak-fetch",
-  "version": "1.0.20",
+  "version": "1.0.21",
   "description": "a batching queuing fetch the ak way",
   "main": "index.js",
   "scripts": {
