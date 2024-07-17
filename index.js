@@ -19,6 +19,7 @@ require('dotenv').config({ debug: false, override: false });
  * @property {Object[] & string & import('stream').Readable & any} data - An array of data objects, readable stream, or jsonl file to be sent in the requests.
  * @property {number} [batchSize] - The number of records to be sent in each batch. Use batch = 0 to not batch.
  * @property {number} [concurrency] - The level of concurrency for the requests.
+ * @property {number} [maxTasks] - The maximum number of tasks to on the queue at once.
  * @property {number} [delay] - The delay between requests.
  * @property {Object|null} [searchParams] - An object representing the search parameters to be appended to the URL.
  * @property {Object|null} [bodyParams] - An object representing the body parameters to be sent in the request.
@@ -73,6 +74,7 @@ async function main(PARAMS) {
 		url = "",
 		batchSize = 1,
 		concurrency = 10,
+		maxTasks = 25,
 		data = undefined,
 		bodyParams = undefined,
 		searchParams = undefined,
@@ -313,7 +315,9 @@ async function makeHttpRequest(url, data, searchParams = null, headers = { "Cont
 }
 
 async function processStream(stream, PARAMS, retryConfig) {
+
 	if (!stream) return Promise.resolve([]);
+
 	let {
 		url,
 		searchParams,
@@ -333,10 +337,11 @@ async function processStream(stream, PARAMS, retryConfig) {
 		storeResponses = true,
 		forceGC = false,
 		batchSize = 2000,
-		highWaterMark = 16384
+		highWaterMark = 16384,
+		maxTasks = 25
 	} = PARAMS;
 
-	const queue = new RunQueue({ maxConcurrency: concurrency });
+	let queue = new RunQueue({ maxConcurrency: concurrency });
 	const responses = [];
 	let reqCount = 0;
 	let rowCount = 0;
@@ -345,13 +350,18 @@ async function processStream(stream, PARAMS, retryConfig) {
 
 	stream.on('error', error => {
 		console.error("stream error:", error);
-		stream.removeAllListeners();
-		stream.destroy(); // Optionally destroy the stream on error
-
+		cleanup(stream);
 	});
-	for await (const data of stream) {
+
+	stream.on('end', () => {
+		if (verbose) console.log(`\nStream ended: (queued: ${queue.queued} max: ${maxTasks} rows: ${rowCount} reqs: ${reqCount})`);
+		cleanup(stream);
+	});
+
+	consumeObjectStream: for await (const data of stream) {
 		batch.push(data);
 		rowCount++;
+
 
 		if (batch.length >= batchSize) {
 			// Process the current batch if it reaches the batchSize
@@ -359,44 +369,46 @@ async function processStream(stream, PARAMS, retryConfig) {
 			batch = []; // Reset the batch
 		}
 
-		// Manage backpressure by checking the queue size against the highWaterMark
-		if (queue.queued >= highWaterMark && !isStreamPaused) {
-			if (verbose) console.log(`\nPausing stream due to high queue size.\n\t\tqueued: ${queue.queued} water: ${highWaterMark} rows: ${rowCount} reqs: ${reqCount}\n`);
-			stream.pause();
-			isStreamPaused = true;
+		// Check if the queue size exceeds maxTasks
+		if (queue.queued >= maxTasks && !isStreamPaused) {
+			// Pause the stream and wait for the queue to complete
+			if (!isStreamPaused) {
+				if (verbose) console.log(`\nPausing Stream: (queued: ${queue.queued} max: ${maxTasks} rows: ${rowCount} reqs: ${reqCount})`);
+				stream.pause();
+				isStreamPaused = true;
+			}
+
+			// Wait for the queue to complete
+			await queue.run();
+			queue = new RunQueue({ maxConcurrency: concurrency });
+
+			// Resume the stream
+			if (isStreamPaused) {
+				if (verbose) console.log(`\nResuming stream: (queued: ${queue.queued} max: ${maxTasks} rows: ${rowCount} reqs: ${reqCount})`);
+				stream.resume();
+				isStreamPaused = false;
+			}
 		}
 
-		if (stream.readableFlowing === false && queue.queued < highWaterMark) {
-			if (verbose) console.log(`\RResuming stream\n\t\tqueued: ${queue.queued} water: ${highWaterMark} rows: ${rowCount} reqs: ${reqCount}\n`);
-			stream.resume();
-			isStreamPaused = false;
-		}
-
+		continue consumeObjectStream;
 	}
 
 	// Process any remaining data in the batch after the stream ends
 	if (batch.length > 0) {
 		addBatchToQueue(batch);
-	}
-
-	try {
-		// Wait for all tasks to complete
 		await queue.run();
 	}
-	catch (error) {
-		console.error("Error processing tasks:", error);
-	}
-	finally {
-		stream.destroy(); // Close the stream after processing
-	}
+
+	queue = null; // Cleanup the queue
+	cleanup(stream); // Cleanup the stream
 
 	if (verbose) {
-		console.log("\nAll tasks have been processed.\n");
+		console.log(`\nAll tasks have been processed. (rows: ${rowCount} reqs: ${reqCount})\n`);
 	}
 
 	if (logFile) {
 		await touch(logFile, responses, true);
-		if (verbose) console.log(`\nResponses written to ${logFile}`);
+		if (verbose) console.log(`\nlog written to ${logFile}`);
 	}
 
 	return [responses, reqCount, rowCount];
@@ -424,12 +436,6 @@ async function processStream(stream, PARAMS, retryConfig) {
 				}
 			}
 		});
-
-		// Resume the stream if it was paused and the queue is under capacity
-		if (stream.isPaused() && queue.queued < highWaterMark) {
-			if (verbose) console.log(`\RResuming stream\n\t\tqueued: ${queue.queued} water: ${highWaterMark} rows: ${rowCount} reqs: ${reqCount}\n`);
-			stream.resume();
-		}
 	}
 }
 
@@ -455,6 +461,12 @@ if (require.main === module) {
 
 
 
+function cleanup(stream) {
+	if (stream) {
+		stream.removeAllListeners();
+		stream.destroy();
+	}
+}
 
 // Function to transform JSONL to JSON objects
 function jsonlToJSON(highWaterMark = 16384) {

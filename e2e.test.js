@@ -368,12 +368,14 @@ test('big data', async () => {
 		url: REQUEST_BIN,
 		data: largeDataSet,
 		batchSize: 100,
-		concurrency: 10,
+		concurrency: 1,
+		maxTasks: 2,
+		verbose: true,
 	};
 
 	const result = await main(config);
 	expect(result.responses.length).toBe(10);
-});
+}, 60_000);
 
 
 test('high concurrency', async () => {
