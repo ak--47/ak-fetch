@@ -11,9 +11,6 @@ const { execSync } = require('child_process');
 const { Transform, Readable } = require('stream');
 const path = require('path');
 const { createReadStream, existsSync } = require('fs');
-
-
-
 require('dotenv').config({ debug: false, override: false });
 
 /**
@@ -43,6 +40,7 @@ require('dotenv').config({ debug: false, override: false });
  * @property {function} [responseHandler] - A function passed each response.
  * @property {boolean} [storeResponses] - Store the responses
  * @property {boolean} [clone] - Clone the data before sending it (useful if using transform).
+ * @property {boolean} [forceGC] - Force garbage collection after each batch.
  */
 
 /** 
@@ -96,7 +94,8 @@ async function main(PARAMS) {
 		errorHandler = undefined,
 		responseHandler = undefined,
 		clone = false,
-		storeResponses = true
+		storeResponses = true,
+		forceGC = false
 	} = PARAMS;
 
 	if (!url) throw new Error("No URL provided");
@@ -115,52 +114,44 @@ async function main(PARAMS) {
 		console.log('\n\tJOB CONFIG:\n', json(NON_DATA_PARAMS), '\n');
 	}
 
-
-	let batches;
 	let stream;
 	if (data instanceof require('stream').Readable) {
 		data.readableObjectMode ? stream = data : stream = data.pipe(jsonlToJSON(highWaterMark));
-		batches = streamToBatches(stream, PARAMS.batchSize);
+
 	}
 	else if (typeof data === 'string') {
 		if (existsSync(path.resolve(data))) {
 			stream = createReadStream(path.resolve(data), { highWaterMark }).pipe(jsonlToJSON(highWaterMark));
-			batches = streamToBatches(stream, PARAMS.batchSize);
+
 		}
 		else if (isJSONStr(data)) {
 			stream = Readable.from(JSON.parse(data));
-			batches = streamToBatches(stream, PARAMS.batchSize);
+
 
 		}
 		else if (isJSONStr(data?.split('\n')?.pop() || "")) {
 			stream = Readable.from(data).pipe(jsonlToJSON(highWaterMark));
-			batches = streamToBatches(stream, PARAMS.batchSize);
+
 		}
 		else {
 			throw new Error("Invalid data source");
 		}
 	}
 	else if (Array.isArray(data)) {
-		// if (Array.isArray(data[0])) {
-		// 	batches = batchData(data, PARAMS.batchSize);
-		// }
-		// else {
-		// 	batches = batchData(data], PARAMS.batchSize);
-		// }
 		stream = Readable.from(data);
-		batches = streamToBatches(stream, PARAMS.batchSize);
+
 
 	}
 	else if (typeof data === 'object') {
 		stream = Readable.from([data]);
-		batches = streamToBatches(stream, PARAMS.batchSize);
 	}
 	else {
 		if (method?.toUpperCase() !== "GET") throw new Error("Invalid data source");
+		if (method?.toUpperCase() === "GET") return await makeHttpRequest(url, data, searchParams, headers, bodyParams, false, retryConfig, method, debug, transform, clone, errorHandler, verbose, responseHandler);
 	}
 
-	const [responses = [], reqCount = 0, rowCount = 0] = await processBatches(batches, PARAMS, retryConfig);
-	if (stream) stream.removeAllListeners()
+	const [responses = [], reqCount = 0, rowCount = 0] = await processStream(stream, PARAMS, retryConfig);
+	if (stream) stream.removeAllListeners();
 	const endTime = Date.now();
 	const duration = endTime - startTime;
 	const clockTime = prettyTime(duration);
@@ -321,8 +312,8 @@ async function makeHttpRequest(url, data, searchParams = null, headers = { "Cont
 	}
 }
 
-
-async function processBatches(batches, PARAMS, retryConfig) {
+async function processStream(stream, PARAMS, retryConfig) {
+	if (!stream) return Promise.resolve([]);
 	let {
 		url,
 		searchParams,
@@ -334,66 +325,111 @@ async function processBatches(batches, PARAMS, retryConfig) {
 		concurrency,
 		logFile,
 		verbose,
-		data,
 		debug = false,
 		transform,
 		errorHandler,
 		clone,
 		responseHandler,
-		storeResponses = true
+		storeResponses = true,
+		forceGC = false,
+		batchSize = 2000,
+		highWaterMark = 16384
 	} = PARAMS;
 
 	const queue = new RunQueue({ maxConcurrency: concurrency });
-	const totalReq = batches?.length || "streamed";
 	const responses = [];
-	let requestCount = 0;
+	let reqCount = 0;
 	let rowCount = 0;
+	let batch = [];
+	let isStreamPaused = false;
 
-	if (!batches) batches = [null];
+	stream.on('error', error => {
+		console.error("stream error:", error);
+		stream.removeAllListeners();
+		stream.destroy(); // Optionally destroy the stream on error
 
-	for await (const batch of batches) {
-		queue.add(0, async () => {
-			const response = await makeHttpRequest(url, batch, searchParams, headers, bodyParams, dryRun, retryConfig, method, debug, transform, clone, errorHandler, verbose, responseHandler);
-			if (storeResponses) responses.push(response);
-			requestCount++;
-			rowCount += batch?.length || 1;
-			if (delay) await new Promise(r => setTimeout(r, delay));
+	});
+	for await (const data of stream) {
+		batch.push(data);
+		rowCount++;
 
-			// Progress bar
-			if (!dryRun && verbose) {
-				readline.cursorTo(process.stdout, 0);
-				readline.clearLine(process.stdout, 0);
-				const percent = Math.floor(requestCount / totalReq * 100);
-				const msg = `completed ${comma(requestCount)} of ${comma(totalReq)} requests    ${isNaN(percent) ? "?" : percent}%\t`;
-				process.stdout.write(`\t${msg}\t`);
-			}
-		});
+		if (batch.length >= batchSize) {
+			// Process the current batch if it reaches the batchSize
+			addBatchToQueue(batch);
+			batch = []; // Reset the batch
+		}
+
+		// Manage backpressure by checking the queue size against the highWaterMark
+		if (queue.queued >= highWaterMark && !isStreamPaused) {
+			if (verbose) console.log(`\nPausing stream due to high queue size.\n\t\tqueued: ${queue.queued} water: ${highWaterMark} rows: ${rowCount} reqs: ${reqCount}\n`);
+			stream.pause();
+			isStreamPaused = true;
+		}
+
+		if (stream.readableFlowing === false && queue.queued < highWaterMark) {
+			if (verbose) console.log(`\RResuming stream\n\t\tqueued: ${queue.queued} water: ${highWaterMark} rows: ${rowCount} reqs: ${reqCount}\n`);
+			stream.resume();
+			isStreamPaused = false;
+		}
+
 	}
 
-	await queue.run();
-	if (verbose) console.log("\nAll batches have been processed.\n");
+	// Process any remaining data in the batch after the stream ends
+	if (batch.length > 0) {
+		addBatchToQueue(batch);
+	}
+
+	try {
+		// Wait for all tasks to complete
+		await queue.run();
+	}
+	catch (error) {
+		console.error("Error processing tasks:", error);
+	}
+	finally {
+		stream.destroy(); // Close the stream after processing
+	}
+
+	if (verbose) {
+		console.log("\nAll tasks have been processed.\n");
+	}
 
 	if (logFile) {
 		await touch(logFile, responses, true);
-		if (verbose) console.log(`\n written to ${logFile}`);
+		if (verbose) console.log(`\nResponses written to ${logFile}`);
 	}
 
-	return [responses, requestCount, rowCount];
-}
+	return [responses, reqCount, rowCount];
 
-async function* streamToBatches(dataStream, batchSize) {
-	let batch = [];
+	function addBatchToQueue(currentBatch) {
+		queue.add(0, async () => {
+			try {
+				const response = await makeHttpRequest(url, currentBatch, searchParams, headers, bodyParams, dryRun, retryConfig, method, debug, transform, clone, errorHandler, verbose, responseHandler);
+				if (storeResponses) responses.push(response);
+				reqCount++;
+				if (delay) await new Promise(resolve => setTimeout(resolve, delay));
+				if (verbose) {
+					readline.cursorTo(process.stdout, 0);
+					readline.clearLine(process.stdout, 0);
+					const percent = Math.floor(reqCount / (rowCount / batchSize) * 100); // Update percentage calculation
+					const msg = `completed ${comma(reqCount)} of ${comma(Math.ceil(rowCount / batchSize))} batches ${isNaN(percent) ? "?" : percent}%\t`;
+					process.stdout.write(`\t${msg}\t`);
+				}
+			} catch (error) {
+				console.error('Failed to process batch:', error);
+				if (errorHandler) errorHandler(error);
+			} finally {
+				if (forceGC && global.gc) {
+					global.gc(); // Optional: force garbage collection
+				}
+			}
+		});
 
-	for await (const data of dataStream) {
-		batch.push(data);
-		if (batch.length >= batchSize) {
-			yield batch;
-			batch = [];
+		// Resume the stream if it was paused and the queue is under capacity
+		if (stream.isPaused() && queue.queued < highWaterMark) {
+			if (verbose) console.log(`\RResuming stream\n\t\tqueued: ${queue.queued} water: ${highWaterMark} rows: ${rowCount} reqs: ${reqCount}\n`);
+			stream.resume();
 		}
-	}
-
-	if (batch.length > 0) {
-		yield batch;  // Yield any remaining items as the last batch
 	}
 }
 

@@ -199,7 +199,7 @@ test('get requests', async () => {
 
 	const result = await main(config);
 	const expected = `<!DOCTYPE HTML>`;
-	expect(result.responses[0].startsWith(expected)).toBe(true);
+	expect(result.startsWith(expected)).toBe(true);
 
 	// expect(fetch).toHaveBeenCalledTimes(1);
 	// expect(result[0]).toHaveProperty('success', true);
