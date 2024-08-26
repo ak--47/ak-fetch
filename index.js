@@ -42,6 +42,7 @@ require('dotenv').config({ debug: false, override: false });
  * @property {boolean} [storeResponses] - Store the responses
  * @property {boolean} [clone] - Clone the data before sending it (useful if using transform).
  * @property {boolean} [forceGC] - Force garbage collection after each batch.
+ * @property {boolean} [noBatch] - Do not batch the requests and just transactionally send them.
  */
 
 /** 
@@ -97,7 +98,9 @@ async function main(PARAMS) {
 		responseHandler = undefined,
 		clone = false,
 		storeResponses = true,
-		forceGC = false
+		forceGC = false,
+		noBatch = false
+		
 	} = PARAMS;
 
 	if (!url) throw new Error("No URL provided");
@@ -114,6 +117,10 @@ async function main(PARAMS) {
 	if (verbose) {
 		const { data, ...NON_DATA_PARAMS } = PARAMS;
 		console.log('\n\tJOB CONFIG:\n', json(NON_DATA_PARAMS), '\n');
+	}
+
+	if (noBatch) {
+		return await makeHttpRequest(url, data, searchParams, headers, bodyParams, dryRun, retryConfig, method, debug, transform, clone, errorHandler, verbose, responseHandler);
 	}
 
 	let stream;
