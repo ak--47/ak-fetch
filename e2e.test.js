@@ -40,19 +40,6 @@ test('throws: DATA', async () => {
 	}
 });
 
-test('fire and forget', async () => {
-	/** @type {Config} */
-	const config = {
-		url: REQUEST_BIN,
-		data: [{}, {}, {}],
-		retries: null,
-		batchSize: 1
-	};
-	const result = await main(config);
-	const expected = [{}, {}, {}].map(a => { return { url: REQUEST_BIN, data: [{}], status: "fire and forget" }; });
-	expect(result.responses).toEqual(expected);
-});
-
 test('batches', async () => {
 	fetch.mockResolvedValueOnce({
 		ok: true,
@@ -108,6 +95,58 @@ test('content types', async () => {
 	expect(resultForm.responses[0]).toHaveProperty('success', true);
 });
 
+test('multiple configs', async () => {
+	/** @type {Config[]} */
+	const configs = [
+	  {
+		url: REQUEST_BIN,
+		data: [{ id: 1 }, { id: 2 }],
+		batchSize: 0,
+		noBatch: true,
+	  },
+	  {
+		url: REQUEST_BIN,
+		data: [{ id: 3 }, { id: 4 }],
+		batchSize: 0,
+		noBatch: true,
+	  },
+	];
+  
+	const results = await main(configs);
+  
+	expect(Array.isArray(results)).toBe(true);
+	expect(results.length).toBe(2);
+  
+	
+  });
+  
+  test('multiple configs with error', async () => {
+	/** @type {Config[]} */
+	const configs = [
+	  {
+		url: REQUEST_BIN,
+		data: [{ id: 1 }, { id: 2 }],
+		noBatch: true,
+	  },
+	  {
+		url: "invalid-url", // This will cause an error
+		data: [{ id: 3 }, { id: 4 }],
+		noBatch: true,
+	  },
+	];
+  
+	const results = await main(configs);
+  
+	expect(Array.isArray(results)).toBe(true);
+	expect(results.length).toBe(2);
+  
+	
+  
+	// Check the results of the second config (should have an error)
+	expect(results[0]).toHaveProperty('error'); 
+	expect(results[1]).toHaveProperty('success');
+  });
+
 test('dry runs', async () => {
 	/** @type {Config} */
 	const config = {
@@ -119,6 +158,21 @@ test('dry runs', async () => {
 	const result = await main(config);
 	expect(fetch).not.toHaveBeenCalled();
 	expect(result.responses.length).toBe(2);
+});
+
+
+
+test('fire and forget', async () => {
+	/** @type {Config} */
+	const config = {
+		url: REQUEST_BIN,
+		data: [{}, {}, {}],
+		retries: null,
+		batchSize: 1
+	};
+	const result = await main(config);
+	const expected = [{}, {}, {}].map(a => { return { url: REQUEST_BIN, data: [{}], status: "fire and forget" }; });
+	expect(result.responses).toEqual(expected);
 });
 
 test('curl', async () => {

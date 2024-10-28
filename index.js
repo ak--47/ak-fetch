@@ -61,8 +61,8 @@ require('dotenv').config({ debug: false, override: false });
 
 /**
  * A function to send a batch of POST requests to an API endpoint.
- * @param  {BatchRequestConfig} PARAMS
- * @returns {Promise<Result>} - An array of responses from the API.
+ * @param  {BatchRequestConfig | BatchRequestConfig[]} PARAMS
+ * @returns {Promise<Result | Result[]>} - An array of responses from the API.
  * @example
  * const jobConfig = { url: "https://api.example.com", data: [{...}, {...}], searchParams: {verbose: "1"} };
  * const responses = await main(jobConfig);
@@ -70,6 +70,41 @@ require('dotenv').config({ debug: false, override: false });
  * 
  */
 async function main(PARAMS) {
+
+
+	// If PARAMS is an array, process each config sequentially with concurrency 10
+	if (Array.isArray(PARAMS)) {
+		const queue = new RunQueue({ maxConcurrency: PARAMS[0]?.concurrency || 10 });
+		const results = [];
+
+		for (const param of PARAMS) {
+			queue.add(0, async () => {
+				try {
+					const result = await processSingleConfig(param);
+					results.push(result);
+				} catch (error) {
+					console.error('Error processing config:', error);
+					// Optionally handle the error, e.g., by pushing a special result object
+					results.push({ error });
+				}
+			});
+		}
+
+		await queue.run();
+		return results;
+	} else {
+		// Otherwise, process the single config as before
+		return processSingleConfig(PARAMS);
+	}
+}
+
+/**
+* Helper function to process a single BatchRequestConfig.
+* @param {BatchRequestConfig} PARAMS 
+* @returns {Promise<Result>}
+*/
+async function processSingleConfig(PARAMS) {
+
 	const startTime = Date.now();
 	const {
 		url = "",
@@ -100,7 +135,7 @@ async function main(PARAMS) {
 		storeResponses = true,
 		forceGC = false,
 		noBatch = false
-		
+
 	} = PARAMS;
 
 	if (!url) throw new Error("No URL provided");
