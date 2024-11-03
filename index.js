@@ -344,7 +344,7 @@ async function makeHttpRequest(url, data, searchParams = null, headers = { "Cont
 
 		if (responseHandler) {
 			if (typeof responseHandler === 'function') {
-				responseHandler(result);
+				return responseHandler(result);
 			}
 		}
 		return result;
