@@ -39,6 +39,7 @@ require('dotenv').config({ debug: false, override: false });
  * @property {function} [transform] - A function to transform the data before sending it.
  * @property {function} [errorHandler] - A function to handle errors.
  * @property {function} [responseHandler] - A function passed each response.
+ * @property {function} [hook] - A function to run after each request ONLY when using an array of configs.
  * @property {boolean} [storeResponses] - Store the responses
  * @property {boolean} [clone] - Clone the data before sending it (useful if using transform).
  * @property {boolean} [forceGC] - Force garbage collection after each batch.
@@ -72,16 +73,34 @@ require('dotenv').config({ debug: false, override: false });
 async function main(PARAMS) {
 
 
-	// If PARAMS is an array, process each config sequentially with concurrency 10
+	// If PARAMS is an array, process each config sequentially with concurrency 10 or the specified concurrency
+	// this is the pattern used when we need to hit multiple endpoints with different configs
 	if (Array.isArray(PARAMS)) {
-		const queue = new RunQueue({ maxConcurrency: PARAMS[0]?.concurrency || 10 });
+		const concurrency = PARAMS[0]?.concurrency || 10;
+		const verbose = PARAMS[0]?.verbose || false;
+		const queue = new RunQueue({ maxConcurrency: concurrency });
 		const results = [];
+		let reqCount = 0;
+		const totalCount = PARAMS.length;
+		const hook = PARAMS[0]?.hook || null;
 
-		for (const param of PARAMS) {
+
+		reqCount++;
+
+		for (const reqConfig of PARAMS) {
 			queue.add(0, async () => {
 				try {
-					const result = await processSingleConfig(param);
+					reqCount++;
+					const result = await processSingleConfig({ ...reqConfig }, false);
 					results.push(result);
+					if (typeof hook === 'function') hook(results);
+					if (verbose) {
+						readline.cursorTo(process.stdout, 0);
+						readline.clearLine(process.stdout, 0);
+						const percent = Math.floor((reqCount / totalCount) * 100); // Update percentage calculation
+						const msg = `completed ${comma(reqCount)} of ${totalCount} batches ${isNaN(percent) ? "?" : percent}%\t`;
+						process.stdout.write(`\t${msg}\t`);
+					}
 				} catch (error) {
 					console.error('Error processing config:', error);
 					// Optionally handle the error, e.g., by pushing a special result object
@@ -89,6 +108,8 @@ async function main(PARAMS) {
 				}
 			});
 		}
+		if (verbose) console.log(`\nadded ${comma(PARAMS.length)} requests with concurrency ${concurrency}...\n`);
+
 
 		await queue.run();
 		return results;
@@ -103,7 +124,7 @@ async function main(PARAMS) {
 * @param {BatchRequestConfig} PARAMS 
 * @returns {Promise<Result>}
 */
-async function processSingleConfig(PARAMS) {
+async function processSingleConfig(PARAMS, isOnlyJob = true) {
 
 	const startTime = Date.now();
 	const {
@@ -149,7 +170,7 @@ async function processSingleConfig(PARAMS) {
 
 	const retryConfig = { retries, retryDelay, retryOn, timeout, keepalive };
 
-	if (verbose) {
+	if (verbose && isOnlyJob) {
 		const { data, ...NON_DATA_PARAMS } = PARAMS;
 		console.log('\n\tJOB CONFIG:\n', json(NON_DATA_PARAMS), '\n');
 	}
