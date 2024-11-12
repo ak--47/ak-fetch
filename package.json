@@ -1,14 +1,14 @@
 {
   "name": "ak-fetch",
-  "version": "1.0.8",
+  "version": "1.0.81",
   "description": "a batching queuing fetch the ak way",
   "main": "index.js",
   "scripts": {
     "test": "jest",
     "post": "npm publish",
-	"prune": "rm -rf logs/*",
-	"coverage": "node --no-warnings --experimental-vm-modules node_modules/jest/bin/jest.js --coverage && open ./coverage/lcov-report/index.html",
-	"scratch": "nodemon scratch.mjs"
+    "prune": "rm -rf logs/*",
+    "coverage": "node --no-warnings --experimental-vm-modules node_modules/jest/bin/jest.js --coverage && open ./coverage/lcov-report/index.html",
+    "scratch": "nodemon scratch.mjs"
   },
   "repository": {
     "type": "git",
@@ -28,7 +28,7 @@
     "nodemon": "^3.1.0"
   },
   "dependencies": {
-    "ak-tools": "^1.0.51",
+    "ak-tools": "^1.0.68",
     "dotenv": "^16.4.5",
     "fetch-retry": "^6.0.0",
     "querystring": "^0.2.1",

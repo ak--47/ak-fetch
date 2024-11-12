@@ -1,6 +1,6 @@
 #! /usr/bin/env node
 const RunQueue = require("run-queue");
-const { json, isJSONStr, comma, touch, clone: cloneObj } = require("ak-tools");
+const { json, isJSONStr, comma, touch, clone: cloneObj, makeExist } = require("ak-tools");
 const readline = require('readline');
 const querystring = require('querystring');
 const cli = require('./cli');
@@ -10,7 +10,8 @@ const fetch = require("fetch-retry")(global.fetch);
 const { execSync } = require('child_process');
 const { Transform, Readable } = require('stream');
 const path = require('path');
-const { createReadStream, existsSync } = require('fs');
+const { createReadStream, existsSync, createWriteStream } = require('fs');
+const { writeFile } = require('fs').promises;
 require('dotenv').config({ debug: false, override: false });
 
 /**
@@ -44,6 +45,7 @@ require('dotenv').config({ debug: false, override: false });
  * @property {boolean} [clone] - Clone the data before sending it (useful if using transform).
  * @property {boolean} [forceGC] - Force garbage collection after each batch.
  * @property {boolean} [noBatch] - Do not batch the requests and just transactionally send them.
+ * @property {string} [format] - 'json' or 'csv' to format the output.
  */
 
 /** 
@@ -77,7 +79,10 @@ async function main(PARAMS) {
 	// this is the pattern used when we need to hit multiple endpoints with different configs
 	if (Array.isArray(PARAMS)) {
 		const concurrency = PARAMS[0]?.concurrency || 10;
+		const delay = PARAMS[0]?.delay || 0;
 		const verbose = PARAMS[0]?.verbose || false;
+		const logFile = PARAMS[0]?.logFile || undefined;
+		const format = PARAMS[0]?.format || 'json';
 		const queue = new RunQueue({ maxConcurrency: concurrency });
 		const results = [];
 		let reqCount = 0;
@@ -89,6 +94,7 @@ async function main(PARAMS) {
 
 		for (const reqConfig of PARAMS) {
 			queue.add(0, async () => {
+				await new Promise(resolve => setTimeout(resolve, delay));
 				try {
 					reqCount++;
 					const result = await processSingleConfig({ ...reqConfig }, false);
@@ -112,6 +118,28 @@ async function main(PARAMS) {
 
 
 		await queue.run();
+		if (logFile) {
+			try {
+				if (verbose) console.log(`\nwriting log to ${logFile}...`);
+				await makeExist(logFile);
+				switch (format) {
+					case 'json':
+						await streamJSON(logFile, results);
+						break;
+					case 'csv':
+						await streamCSV(logFile, results);
+						break;
+					case 'ndjson':
+						await streamNDJSON(logFile, results);
+						break;
+					default:
+						await streamJSON(logFile, results);
+				}
+			}
+			catch (error) {
+				console.error('Error writing log:', error);
+			}
+		}
 		return results;
 	} else {
 		// Otherwise, process the single config as before
@@ -590,6 +618,64 @@ function prettyTime(milliseconds) {
 	}
 	return result.trim();
 }
+
+async function streamJSON(filePath, data) {	
+	await writeFile(filePath, JSON.stringify(data, null, 2));
+	return filePath;
+}
+
+
+async function streamNDJSON(filePath, data) {
+	return new Promise((resolve, reject) => {
+		const writeStream = createWriteStream(filePath, { encoding: 'utf8' });
+		data.forEach(item => {
+			writeStream.write(JSON.stringify(item) + '\n');
+		});
+		writeStream.end();
+		writeStream.on('finish', () => {
+			resolve(filePath);
+		});
+		writeStream.on('error', reject);
+	});
+}
+
+async function streamCSV(filePath, data) {
+	return new Promise((resolve, reject) => {
+		const writeStream = createWriteStream(filePath, { encoding: 'utf8' });
+		// Extract all unique keys from the data array
+		const columns = getUniqueKeys(data);  // Assuming getUniqueKeys properly retrieves all keys
+
+		// Stream the header
+		writeStream.write(columns.join(',') + '\n');
+
+		// Stream each data row
+		data.forEach(item => {
+			for (const key in item) {
+				// Ensure all nested objects are properly stringified
+				if (typeof item[key] === "object") item[key] = JSON.stringify(item[key]);
+			}
+			const row = columns.map(col => item[col] ? `"${item[col].toString().replace(/"/g, '""')}"` : "").join(',');
+			writeStream.write(row + '\n');
+		});
+
+		writeStream.end();
+		writeStream.on('finish', () => {
+			resolve(filePath);
+		});
+		writeStream.on('error', reject);
+	});
+}
+
+function getUniqueKeys(data) {
+	const keysSet = new Set();
+	data.forEach(item => {
+		Object.keys(item).forEach(key => keysSet.add(key));
+	});
+	return Array.from(keysSet);
+};
+
+
+
 
 module.exports = main;
 

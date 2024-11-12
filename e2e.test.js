@@ -3,6 +3,8 @@ const main = require('./index.js');
 const { execSync } = require("child_process");
 const u = require('ak-tools');
 const { Readable } = require('stream');
+const path = require('path');
+const TEMP_DIR = path.resolve('./logs');
 
 
 /** @typedef {import('./index').BatchRequestConfig} Config */
@@ -161,6 +163,142 @@ test('many get requests', async () => {
 
 });
 
+test('many get requests save to file: json', async () => {
+	let counter = 0;
+	/** @type {Config[]} */
+	const configs = [
+		{
+			url: REQUEST_BIN + "?id=1",
+			method: 'GET',
+			noBatch: true,
+			verbose: true,
+			logFile: TEMP_DIR + '/test.json',
+			hook: function (currentData) {
+				counter++;
+			}
+		},
+		{
+			url: REQUEST_BIN + "?id=2",
+			method: 'GET',
+			noBatch: true,
+		},
+		{
+			url: REQUEST_BIN + "?id=3",
+			method: 'GET',
+			noBatch: true,
+		},
+		{
+			url: REQUEST_BIN + "?id=4",
+			method: 'GET',
+			noBatch: true,
+		},
+
+	];
+
+	const results = await main(configs);
+
+	expect(Array.isArray(results)).toBe(true);
+	expect(results.length).toBe(4);
+	expect(counter).toBe(4);
+	expect(results.every(r => r.success)).toBe(true);
+
+});
+
+test('many get requests save to file: csv', async () => {
+	let counter = 0;
+	/** @type {Config[]} */
+	const configs = [
+		{
+			url: REQUEST_BIN + "?id=1",
+			method: 'GET',
+			noBatch: true,
+			verbose: true,
+			format: 'csv',
+			logFile: TEMP_DIR + '/test.csv',
+			hook: function (currentData) {
+				counter++;
+			},
+			responseHandler: function (response) {
+				response.foo = "hello";
+				response.bar = "world";
+				return response;
+			}
+		},
+		{
+			url: REQUEST_BIN + "?id=2",
+			method: 'GET',
+			noBatch: true,
+		},
+		{
+			url: REQUEST_BIN + "?id=3",
+			method: 'GET',
+			noBatch: true,
+		},
+		{
+			url: REQUEST_BIN + "?id=4",
+			method: 'GET',
+			noBatch: true,
+		},
+
+	];
+
+	const results = await main(configs);
+
+	expect(Array.isArray(results)).toBe(true);
+	expect(results.length).toBe(4);
+	expect(counter).toBe(4);
+	expect(results.every(r => r.success)).toBe(true);
+
+});
+
+
+test('many get requests save to file: ndjson', async () => {
+	let counter = 0;
+	/** @type {Config[]} */
+	const configs = [
+		{
+			url: REQUEST_BIN + "?id=1",
+			method: 'GET',
+			noBatch: true,
+			verbose: true,
+			format: 'ndjson',
+			logFile: TEMP_DIR + '/test.ndjson',
+			hook: function (currentData) {
+				counter++;
+			},
+			responseHandler: function (response) {
+				response.foo = "hello";
+				response.bar = "world";
+				return response;
+			}
+		},
+		{
+			url: REQUEST_BIN + "?id=2",
+			method: 'GET',
+			noBatch: true,
+		},
+		{
+			url: REQUEST_BIN + "?id=3",
+			method: 'GET',
+			noBatch: true,
+		},
+		{
+			url: REQUEST_BIN + "?id=4",
+			method: 'GET',
+			noBatch: true,
+		},
+
+	];
+
+	const results = await main(configs);
+
+	expect(Array.isArray(results)).toBe(true);
+	expect(results.length).toBe(4);
+	expect(counter).toBe(4);
+	expect(results.every(r => r.success)).toBe(true);
+
+});
+
 test('multiple configs with error', async () => {
 	/** @type {Config[]} */
 	const configs = [
@@ -200,7 +338,7 @@ test('dry runs', async () => {
 	const result = await main(config);
 	expect(fetch).not.toHaveBeenCalled();
 	expect(result.responses.length).toBe(0);
-	
+
 
 });
 
