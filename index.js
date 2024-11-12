@@ -98,8 +98,8 @@ async function main(PARAMS) {
 				try {
 					reqCount++;
 					const result = await processSingleConfig({ ...reqConfig }, false);
-					results.push(result);
-					if (typeof hook === 'function') hook(results);
+					if (typeof hook === 'function') hook(result, results);
+					results.push(result);					
 					if (verbose) {
 						readline.cursorTo(process.stdout, 0);
 						readline.clearLine(process.stdout, 0);
