@@ -99,7 +99,10 @@ async function main(PARAMS) {
 					reqCount++;
 					const result = await processSingleConfig({ ...reqConfig }, false);
 					if (typeof hook === 'function') hook(result, results);
-					results.push(result);					
+					
+					if (Array.isArray(result)) results.push(...result);
+					else results.push(result);
+									
 					if (verbose) {
 						readline.cursorTo(process.stdout, 0);
 						readline.clearLine(process.stdout, 0);
@@ -115,7 +118,6 @@ async function main(PARAMS) {
 			});
 		}
 		if (verbose) console.log(`\nadded ${comma(PARAMS.length)} requests with concurrency ${concurrency}...\n`);
-
 
 		await queue.run();
 		if (logFile) {
