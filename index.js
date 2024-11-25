@@ -240,9 +240,9 @@ async function processSingleConfig(PARAMS, isOnlyJob = true) {
 	else if (typeof data === 'object') {
 		stream = Readable.from([data]);
 	}
-	else {
+	else {		
+		if (method?.toUpperCase() !== "POST") return await makeHttpRequest(url, data, searchParams, headers, bodyParams, false, retryConfig, method, debug, transform, clone, errorHandler, verbose, responseHandler);
 		if (method?.toUpperCase() !== "GET") throw new Error("Invalid data source");
-		if (method?.toUpperCase() === "GET") return await makeHttpRequest(url, data, searchParams, headers, bodyParams, false, retryConfig, method, debug, transform, clone, errorHandler, verbose, responseHandler);
 	}
 
 	const [responses = [], reqCount = 0, rowCount = 0] = await processStream(stream, PARAMS, retryConfig);
