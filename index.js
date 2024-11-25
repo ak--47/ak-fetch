@@ -259,7 +259,7 @@ async function processSingleConfig(PARAMS, isOnlyJob = true) {
 
 async function makeHttpRequest(url, data, searchParams = null, headers = { "Content-Type": 'application/json' }, bodyParams, dryRun = false, retryConfig, method = "POST", debug = false, transform, clone, errorHandler, verbose, responseHandler) {
 	if (!url) return Promise.resolve("No URL provided");
-	if (!data && method.toUpperCase() !== 'GET') return Promise.resolve("No data provided");
+	if (!data && method.toUpperCase() !== 'POST') return Promise.resolve("No data provided");
 	if (!headers["Content-Type"]) headers["Content-Type"] = 'application/json';
 
 	const { retries = 3, retryDelay = 1000, retryOn = [429, 500, 502, 503, 504], timeout = 60000, keepalive = false } = retryConfig;
