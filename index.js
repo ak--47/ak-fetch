@@ -190,7 +190,7 @@ async function processSingleConfig(PARAMS, isOnlyJob = true) {
 	} = PARAMS;
 
 	if (!url) throw new Error("No URL provided");
-	if (!data && method?.toUpperCase() !== "GET") throw new Error("No data provided");
+	if (!data && method?.toUpperCase() === "POST") throw new Error("POST request; No data provided");
 
 	if (shell) {
 		const commandOutput = execSync(shell.command).toString().trim();
