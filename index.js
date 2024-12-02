@@ -40,7 +40,7 @@ require('dotenv').config({ debug: false, override: false });
  * @property {function} [transform] - A function to transform the data before sending it.
  * @property {function} [errorHandler] - A function to handle errors.
  * @property {function} [responseHandler] - A function passed each response.
- * @property {function} [hook] - A function to run after each request ONLY when using an array of configs.
+ * @property {function} [hook] - A function to run after ALL requests (ONLY when using an array of configs).
  * @property {boolean} [storeResponses] - Store the responses
  * @property {boolean} [clone] - Clone the data before sending it (useful if using transform).
  * @property {boolean} [forceGC] - Force garbage collection after each batch.
@@ -84,10 +84,10 @@ async function main(PARAMS) {
 		const logFile = PARAMS[0]?.logFile || undefined;
 		const format = PARAMS[0]?.format || 'json';
 		const queue = new RunQueue({ maxConcurrency: concurrency });
-		const results = [];
+		let results = [];
 		let reqCount = 0;
 		const totalCount = PARAMS.length;
-		const hook = PARAMS[0]?.hook || null;
+		let hook = PARAMS[0]?.hook || null;
 
 
 		reqCount++;
@@ -98,7 +98,7 @@ async function main(PARAMS) {
 				try {
 					reqCount++;
 					const result = await processSingleConfig({ ...reqConfig }, false);
-					if (typeof hook === 'function') hook(result, results);
+					// if (typeof hook === 'function') hook(result, results);
 					
 					if (Array.isArray(result)) results.push(...result);
 					else results.push(result);
@@ -123,19 +123,21 @@ async function main(PARAMS) {
 		if (logFile) {
 			try {
 				if (verbose) console.log(`\nwriting log to ${logFile}...`);
+				if (typeof hook !== 'function') hook = a => a;
 				await makeExist(logFile);
+				const dataToWrite = hook(results);
 				switch (format) {
 					case 'json':
-						await streamJSON(logFile, results);
+						await streamJSON(logFile, dataToWrite);
 						break;
 					case 'csv':
-						await streamCSV(logFile, results);
+						await streamCSV(logFile, dataToWrite);
 						break;
 					case 'ndjson':
-						await streamNDJSON(logFile, results);
+						await streamNDJSON(logFile, dataToWrite);
 						break;
 					default:
-						await streamJSON(logFile, results);
+						await streamJSON(logFile, dataToWrite);
 				}
 			}
 			catch (error) {
