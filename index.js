@@ -120,12 +120,12 @@ async function main(PARAMS) {
 		if (verbose) console.log(`\nadded ${comma(PARAMS.length)} requests with concurrency ${concurrency}...\n`);
 
 		await queue.run();
+		if (typeof hook !== 'function') hook = a => a;
+		const dataToWrite = hook(results);
 		if (logFile) {
 			try {
 				if (verbose) console.log(`\nwriting log to ${logFile}...`);
-				if (typeof hook !== 'function') hook = a => a;
-				await makeExist(logFile);
-				const dataToWrite = hook(results);
+				await makeExist(logFile);		
 				switch (format) {
 					case 'json':
 						await streamJSON(logFile, dataToWrite);
