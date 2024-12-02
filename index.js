@@ -144,7 +144,7 @@ async function main(PARAMS) {
 				console.error('Error writing log:', error);
 			}
 		}
-		return results;
+		return dataToWrite;
 	} else {
 		// Otherwise, process the single config as before
 		return processSingleConfig(PARAMS);
