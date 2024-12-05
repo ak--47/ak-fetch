@@ -17,7 +17,7 @@ require('dotenv').config({ debug: false, override: false });
 /**
  * @typedef {Object} BatchRequestConfig
  * @property {string} url - The URL of the API endpoint.
- * @property {Object[] & string & import('stream').Readable & any} data - An array of data objects, readable stream, or jsonl file to be sent in the requests.
+ * @property {Object[] & string & import('stream').Readable & any} [data] - An array of data objects, readable stream, or jsonl file to be sent in the requests.
  * @property {number} [batchSize] - The number of records to be sent in each batch. Use batch = 0 to not batch.
  * @property {number} [concurrency] - The level of concurrency for the requests.
  * @property {number} [maxTasks] - The maximum number of tasks to on the queue at once.
