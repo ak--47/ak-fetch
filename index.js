@@ -40,12 +40,14 @@ require('dotenv').config({ debug: false, override: false });
  * @property {function} [transform] - A function to transform the data before sending it.
  * @property {function} [errorHandler] - A function to handle errors.
  * @property {function} [responseHandler] - A function passed each response.
+ * @property {function} [retryHandler] - A called before every retry; can be async but must return true if req should be retried
  * @property {function} [hook] - A function to run after ALL requests (ONLY when using an array of configs).
  * @property {boolean} [storeResponses] - Store the responses
  * @property {boolean} [clone] - Clone the data before sending it (useful if using transform).
  * @property {boolean} [forceGC] - Force garbage collection after each batch.
  * @property {boolean} [noBatch] - Do not batch the requests and just transactionally send them.
  * @property {string} [format] - 'json' or 'csv' to format the output.
+ * @property {boolean} [responseHeaders] - whether to include response headers in the output.
  */
 
 /** 
@@ -99,10 +101,10 @@ async function main(PARAMS) {
 					reqCount++;
 					const result = await processSingleConfig({ ...reqConfig }, false);
 					// if (typeof hook === 'function') hook(result, results);
-					
+
 					if (Array.isArray(result)) results.push(...result);
 					else results.push(result);
-									
+
 					if (verbose) {
 						readline.cursorTo(process.stdout, 0);
 						readline.clearLine(process.stdout, 0);
@@ -125,7 +127,7 @@ async function main(PARAMS) {
 		if (logFile) {
 			try {
 				if (verbose) console.log(`\nwriting log to ${logFile}...`);
-				await makeExist(logFile);		
+				await makeExist(logFile);
 				switch (format) {
 					case 'json':
 						await streamJSON(logFile, dataToWrite);
@@ -186,6 +188,7 @@ async function processSingleConfig(PARAMS, isOnlyJob = true) {
 		responseHandler = undefined,
 		clone = false,
 		storeResponses = true,
+		responseHeaders = false,
 		forceGC = false,
 		noBatch = false
 
@@ -208,7 +211,23 @@ async function processSingleConfig(PARAMS, isOnlyJob = true) {
 	}
 
 	if (noBatch) {
-		return await makeHttpRequest(url, data, searchParams, headers, bodyParams, dryRun, retryConfig, method, debug, transform, clone, errorHandler, verbose, responseHandler);
+		return await makeHttpRequest(
+			url,
+			data,
+			searchParams,
+			headers,
+			bodyParams,
+			dryRun,
+			retryConfig,
+			method,
+			debug,
+			transform,
+			clone,
+			errorHandler,
+			verbose,
+			responseHandler,
+			responseHeaders
+		);
 	}
 
 	let stream;
@@ -242,8 +261,8 @@ async function processSingleConfig(PARAMS, isOnlyJob = true) {
 	else if (typeof data === 'object') {
 		stream = Readable.from([data]);
 	}
-	else {		
-		if (method?.toUpperCase() !== "POST") return await makeHttpRequest(url, data, searchParams, headers, bodyParams, false, retryConfig, method, debug, transform, clone, errorHandler, verbose, responseHandler);
+	else {
+		if (method?.toUpperCase() !== "POST") return await makeHttpRequest(url, data, searchParams, headers, bodyParams, false, retryConfig, method, debug, transform, clone, errorHandler, verbose, responseHandler, responseHeaders);
 		if (method?.toUpperCase() !== "GET") throw new Error("Invalid data source");
 	}
 
@@ -259,12 +278,13 @@ async function processSingleConfig(PARAMS, isOnlyJob = true) {
 
 }
 
-async function makeHttpRequest(url, data, searchParams = null, headers = { "Content-Type": 'application/json' }, bodyParams, dryRun = false, retryConfig, method = "POST", debug = false, transform, clone, errorHandler, verbose, responseHandler) {
+async function makeHttpRequest(url, data, searchParams = null, headers = { "Content-Type": 'application/json' }, bodyParams, dryRun = false, retryConfig, method = "POST", debug = false, transform, clone, errorHandler, verbose, responseHandler, responseHeaders = false, retryHandler) {
 	if (!url) return Promise.resolve("No URL provided");
 	if (!data && method.toUpperCase() === 'POST') return Promise.resolve("No data provided");
 	if (!headers["Content-Type"]) headers["Content-Type"] = 'application/json';
 
-	const { retries = 3, retryDelay = 1000, retryOn = [429, 500, 502, 503, 504], timeout = 60000, keepalive = false } = retryConfig;
+	let { retries = 3, retryDelay = 1000, retryOn = [429, 500, 502, 503, 504], timeout = 60000, keepalive = false } = retryConfig;
+	if (retryHandler && typeof retryHandler === 'function') retryOn = retryHandler;
 	let isFireAndForget = retries === null;
 	let requestUrl = new URL(url);
 	if (searchParams) {
@@ -305,6 +325,7 @@ async function makeHttpRequest(url, data, searchParams = null, headers = { "Cont
 			retryOn,
 			timeout,
 			keepalive,
+
 		};
 
 		let payload;
@@ -400,6 +421,13 @@ async function makeHttpRequest(url, data, searchParams = null, headers = { "Cont
 				return responseHandler(result);
 			}
 		}
+		if (responseHeaders) {
+			result = {
+				result: result,
+				status: { status, statusText },
+				headers: resHeaders
+			};
+		}
 		return result;
 
 	} catch (error) {
@@ -409,6 +437,10 @@ async function makeHttpRequest(url, data, searchParams = null, headers = { "Cont
 	}
 }
 
+/**
+ * @param  {import('stream')} stream
+ * @param  {BatchRequestConfig} PARAMS
+ */
 async function processStream(stream, PARAMS, retryConfig) {
 
 	if (!stream) return Promise.resolve([]);
@@ -429,7 +461,9 @@ async function processStream(stream, PARAMS, retryConfig) {
 		errorHandler,
 		clone,
 		responseHandler,
+		retryHandler,
 		storeResponses = true,
+		responseHeaders = false,
 		forceGC = false,
 		batchSize = 2000,
 		highWaterMark = 16384,
@@ -511,7 +545,7 @@ async function processStream(stream, PARAMS, retryConfig) {
 	function addBatchToQueue(currentBatch) {
 		queue.add(0, async () => {
 			try {
-				const response = await makeHttpRequest(url, currentBatch, searchParams, headers, bodyParams, dryRun, retryConfig, method, debug, transform, clone, errorHandler, verbose, responseHandler);
+				const response = await makeHttpRequest(url, currentBatch, searchParams, headers, bodyParams, dryRun, retryConfig, method, debug, transform, clone, errorHandler, verbose, responseHandler, responseHeaders);
 				if (storeResponses) responses.push(response);
 				reqCount++;
 				if (delay) await new Promise(resolve => setTimeout(resolve, delay));
@@ -623,7 +657,7 @@ function prettyTime(milliseconds) {
 	return result.trim();
 }
 
-async function streamJSON(filePath, data) {	
+async function streamJSON(filePath, data) {
 	await writeFile(filePath, JSON.stringify(data, null, 2));
 	return filePath;
 }

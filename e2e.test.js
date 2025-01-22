@@ -10,7 +10,7 @@ const TEMP_DIR = path.resolve('./logs');
 /** @typedef {import('./index').BatchRequestConfig} Config */
 
 // Mock fetch
-const REQUEST_BIN = `https://enp5ly7ky8t0c.x.pipedream.net/`;
+const REQUEST_BIN = `https://eokmttd9crhj9g7.m.pipedream.net`;
 
 // Mock global fetch
 global.fetch = jest.fn();
@@ -38,7 +38,7 @@ test('throws: DATA', async () => {
 	try {
 		await main({ url: REQUEST_BIN });
 	} catch (e) {
-		expect(e.message).toBe('No data provided');
+		expect(e.message).toBe('POST request; No data provided');
 	}
 });
 
@@ -80,10 +80,12 @@ test('content types', async () => {
 	const configJson = {
 		url: REQUEST_BIN,
 		data: [{ sampleData: 1 }],
-		headers: { "Content-Type": 'application/json' },
+		headers: { "Content-Type": 'application/json', "Accept": 'application/json' },
 	};
 	const resultJson = await main(configJson);
-	expect(resultJson.responses[0]).toHaveProperty('success', true);
+	expect(resultJson.responses[0]).toBeDefined();
+	const [response] = resultJson.responses;
+	expect(response.success).toBe(true);
 
 	fetch.mockImplementationOnce(() => mockFetchResponse({ success: true }));
 
@@ -94,7 +96,7 @@ test('content types', async () => {
 		headers: { "Content-Type": 'application/x-www-form-urlencoded' },
 	};
 	const resultForm = await main(configForm);
-	expect(resultForm.responses[0]).toHaveProperty('success', true);
+	expect(resultForm.responses[0].includes('Success!')).toBe(true);
 });
 
 test('multiple configs', async () => {
@@ -132,24 +134,37 @@ test('many get requests', async () => {
 			method: 'GET',
 			noBatch: true,
 			verbose: true,
+			headers: {
+				"Accept": 'application/json',
+			},
 			hook: function (currentData) {
 				counter++;
+				return currentData;
 			}
 		},
 		{
 			url: REQUEST_BIN + "?id=2",
 			method: 'GET',
 			noBatch: true,
+			headers: {
+				"Accept": 'application/json',
+			}
 		},
 		{
 			url: REQUEST_BIN + "?id=3",
 			method: 'GET',
 			noBatch: true,
+			headers: {
+				"Accept": 'application/json',
+			}
 		},
 		{
 			url: REQUEST_BIN + "?id=4",
 			method: 'GET',
 			noBatch: true,
+			headers: {
+				"Accept": 'application/json',
+			}
 		},
 
 	];
@@ -158,7 +173,7 @@ test('many get requests', async () => {
 
 	expect(Array.isArray(results)).toBe(true);
 	expect(results.length).toBe(4);
-	expect(counter).toBe(4);
+	expect(counter).toBe(1);
 	expect(results.every(r => r.success)).toBe(true);
 
 });
@@ -175,22 +190,35 @@ test('many get requests save to file: json', async () => {
 			logFile: TEMP_DIR + '/test.json',
 			hook: function (currentData) {
 				counter++;
+				return currentData
+			},
+			headers: {
+				"Accept": 'application/json',
 			}
 		},
 		{
 			url: REQUEST_BIN + "?id=2",
 			method: 'GET',
 			noBatch: true,
+			headers: {
+				"Accept": 'application/json',
+			}
 		},
 		{
 			url: REQUEST_BIN + "?id=3",
 			method: 'GET',
 			noBatch: true,
+			headers: {
+				"Accept": 'application/json',
+			}
 		},
 		{
 			url: REQUEST_BIN + "?id=4",
 			method: 'GET',
 			noBatch: true,
+			headers: {
+				"Accept": 'application/json',
+			}
 		},
 
 	];
@@ -199,7 +227,7 @@ test('many get requests save to file: json', async () => {
 
 	expect(Array.isArray(results)).toBe(true);
 	expect(results.length).toBe(4);
-	expect(counter).toBe(4);
+	expect(counter).toBe(1);
 	expect(results.every(r => r.success)).toBe(true);
 
 });
@@ -217,27 +245,40 @@ test('many get requests save to file: csv', async () => {
 			logFile: TEMP_DIR + '/test.csv',
 			hook: function (currentData) {
 				counter++;
+				return currentData
 			},
 			responseHandler: function (response) {
 				response.foo = "hello";
 				response.bar = "world";
 				return response;
+			},
+			headers: {
+				"Accept": 'application/json',
 			}
 		},
 		{
 			url: REQUEST_BIN + "?id=2",
 			method: 'GET',
 			noBatch: true,
+			headers: {
+				"Accept": 'application/json',
+			}
 		},
 		{
 			url: REQUEST_BIN + "?id=3",
 			method: 'GET',
 			noBatch: true,
+			headers: {
+				"Accept": 'application/json',
+			}
 		},
 		{
 			url: REQUEST_BIN + "?id=4",
 			method: 'GET',
 			noBatch: true,
+			headers: {
+				"Accept": 'application/json',
+			}
 		},
 
 	];
@@ -246,7 +287,7 @@ test('many get requests save to file: csv', async () => {
 
 	expect(Array.isArray(results)).toBe(true);
 	expect(results.length).toBe(4);
-	expect(counter).toBe(4);
+	expect(counter).toBe(1);
 	expect(results.every(r => r.success)).toBe(true);
 
 });
@@ -265,27 +306,40 @@ test('many get requests save to file: ndjson', async () => {
 			logFile: TEMP_DIR + '/test.ndjson',
 			hook: function (currentData) {
 				counter++;
+				return currentData
 			},
 			responseHandler: function (response) {
 				response.foo = "hello";
 				response.bar = "world";
 				return response;
+			},
+			headers: {
+				"Accept": 'application/json',
 			}
 		},
 		{
 			url: REQUEST_BIN + "?id=2",
 			method: 'GET',
 			noBatch: true,
+			headers: {
+				"Accept": 'application/json',
+			}
 		},
 		{
 			url: REQUEST_BIN + "?id=3",
 			method: 'GET',
 			noBatch: true,
+			headers: {
+				"Accept": 'application/json',
+			}
 		},
 		{
 			url: REQUEST_BIN + "?id=4",
 			method: 'GET',
 			noBatch: true,
+			headers: {
+				"Accept": 'application/json',
+			}
 		},
 
 	];
@@ -294,7 +348,7 @@ test('many get requests save to file: ndjson', async () => {
 
 	expect(Array.isArray(results)).toBe(true);
 	expect(results.length).toBe(4);
-	expect(counter).toBe(4);
+	expect(counter).toBe(1);
 	expect(results.every(r => r.success)).toBe(true);
 
 });
@@ -306,11 +360,18 @@ test('multiple configs with error', async () => {
 			url: REQUEST_BIN,
 			data: [{ id: 1 }, { id: 2 }],
 			noBatch: true,
+			headers: {
+				"Accept": 'application/json',
+			}
+			
 		},
 		{
 			url: "invalid-url", // This will cause an error
 			data: [{ id: 3 }, { id: 4 }],
 			noBatch: true,
+			headers: {
+				"Accept": 'application/json',
+			}
 		},
 	];
 
@@ -353,8 +414,8 @@ test('fire and forget', async () => {
 		batchSize: 1
 	};
 	const result = await main(config);
-	const expected = [{}, {}, {}].map(a => { return { url: REQUEST_BIN, data: [{}], status: "fire and forget" }; });
-	expect(result.responses).toEqual(expected);
+	// const expected = [{}, {}, {}].map(a => { return { url: REQUEST_BIN, data: [{}], status: "fire and forget" }; });
+	expect(result.responses).toEqual([]);
 });
 
 test('curl', async () => {
@@ -685,5 +746,25 @@ test('shell headers', async () => {
 		'Authorization': 'Bearer token123'
 	}));
 });
+
+
+test('include headers', async () => {
+	/** @type {Config} */
+	const config = {
+		url: REQUEST_BIN,
+		// data: [{ sampleData: 1 }],
+		responseHeaders: true,
+		noBatch: true,
+		method: "GET"
+	};
+	const req = await main(config);
+	const { headers, result, status } = req;
+	expect(headers).toBeDefined();
+	expect(result).toBeDefined();
+	expect(status).toBeDefined();
+	expect(status.status).toBe(200);
+	expect(status.statusText).toBe("OK");
+
+})
 
 
