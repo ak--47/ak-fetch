@@ -38,7 +38,7 @@ test('throws: DATA', async () => {
 	try {
 		await main({ url: REQUEST_BIN });
 	} catch (e) {
-		expect(e.message).toBe('POST request; No data provided');
+		expect(e.message).toBe('POST request requires data');
 	}
 });
 
