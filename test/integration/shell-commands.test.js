@@ -170,7 +170,7 @@ describe('Shell Commands', () => {
                 url: mockUrl,
                 data: testData,
                 shell: {
-                    command: 'node -e "console.log(\\'generated-token\\' + Date.now())"',
+                    command: 'node -e "console.log(\'generated-token\' + Date.now())"',
                     header: 'X-Dynamic-Token',
                     prefix: 'Generated:'
                 },
@@ -186,7 +186,7 @@ describe('Shell Commands', () => {
                 url: mockUrl,
                 data: testData,
                 shell: {
-                    command: 'echo \'{"token": "json-token-value"}\' | node -e "console.log(JSON.parse(require(\\'fs\\').readFileSync(0)).token)"',
+                    command: 'echo \'{"token": "json-token-value"}\' | node -e "console.log(JSON.parse(require(\'fs\').readFileSync(0)).token)"',
                     header: 'Authorization',
                     prefix: 'Bearer'
                 },

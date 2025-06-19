@@ -29,7 +29,7 @@ describe('AkCookieJar', () => {
             const cookie = await cookieJar.setCookie('test=value', testUrl);
             
             expect(cookie).toBeTruthy();
-            expect(cookie.name).toBe('test');
+            expect(cookie.key).toBe('test');
             expect(cookie.value).toBe('value');
         });
 
@@ -38,7 +38,7 @@ describe('AkCookieJar', () => {
             const cookie = await cookieJar.setCookie(cookieString, testUrl);
             
             expect(cookie).toBeTruthy();
-            expect(cookie.name).toBe('session');
+            expect(cookie.key).toBe('session');
             expect(cookie.value).toBe('abc123');
             expect(cookie.path).toBe('/');
             expect(cookie.httpOnly).toBe(true);
@@ -69,9 +69,9 @@ describe('AkCookieJar', () => {
             const cookies = await cookieJar.setCookies(cookieStrings, testUrl);
             
             expect(cookies).toHaveLength(3);
-            expect(cookies[0].name).toBe('cookie1');
-            expect(cookies[1].name).toBe('cookie2');
-            expect(cookies[2].name).toBe('cookie3');
+            expect(cookies[0].key).toBe('cookie1');
+            expect(cookies[1].key).toBe('cookie2');
+            expect(cookies[2].key).toBe('cookie3');
         });
 
         test('should handle empty array', async () => {
@@ -90,7 +90,7 @@ describe('AkCookieJar', () => {
             
             // Should only set valid cookies
             expect(cookies.length).toBeLessThanOrEqual(2);
-            expect(cookies.some(c => c.name === 'valid')).toBe(true);
+            expect(cookies.some(c => c.key === 'valid')).toBe(true);
         });
     });
 
@@ -136,7 +136,7 @@ describe('AkCookieJar', () => {
             const cookies = await cookieJar.getCookies(testUrl);
             
             expect(cookies).toHaveLength(1);
-            expect(cookies[0].name).toBe('test');
+            expect(cookies[0].key).toBe('test');
             expect(cookies[0].value).toBe('value');
         });
 
@@ -159,8 +159,8 @@ describe('AkCookieJar', () => {
             expect(removed).toBeGreaterThan(0);
             
             const remaining = await cookieJar.getCookies(testUrl);
-            expect(remaining.some(c => c.name === 'cookie1')).toBe(false);
-            expect(remaining.some(c => c.name === 'cookie2')).toBe(true);
+            expect(remaining.some(c => c.key === 'cookie1')).toBe(false);
+            expect(remaining.some(c => c.key === 'cookie2')).toBe(true);
         });
 
         test('should remove all cookies when no name specified', async () => {
@@ -207,7 +207,7 @@ describe('AkCookieJar', () => {
             const cookies = await cookieJar.processResponseHeaders(headers, testUrl);
             
             expect(cookies).toHaveLength(1);
-            expect(cookies[0].name).toBe('session');
+            expect(cookies[0].key).toBe('session');
         });
 
         test('should process Set-Cookie header (array)', async () => {
@@ -221,8 +221,8 @@ describe('AkCookieJar', () => {
             const cookies = await cookieJar.processResponseHeaders(headers, testUrl);
             
             expect(cookies).toHaveLength(2);
-            expect(cookies[0].name).toBe('cookie1');
-            expect(cookies[1].name).toBe('cookie2');
+            expect(cookies[0].key).toBe('cookie1');
+            expect(cookies[1].key).toBe('cookie2');
         });
 
         test('should return empty array when no Set-Cookie header', async () => {

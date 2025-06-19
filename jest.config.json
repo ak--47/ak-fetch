@@ -1,5 +1,5 @@
 {
-	"testTimeout": 60000,
+	"testTimeout": 10000,
 	"verbose": true,
 	"testEnvironment": "node",
 	"collectCoverage": false,

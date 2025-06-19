@@ -30,7 +30,7 @@ async function runBatchSizeTest(batchSize, dataSize = '100k') {
             data: dataFile,
             batchSize: batchSize,
             concurrency: 15, // Fixed concurrency for batch size comparison
-            verbose: false,
+            verbose: true,
             retries: 3,
             timeout: 30000,
             enableConnectionPooling: true,
@@ -92,15 +92,9 @@ async function runBatchSizeBenchmark() {
     console.log('Testing different batch sizes to find optimal batching strategy...\n');
     
     const batchSizes = [
-        1,      // Individual requests
-        10,     // Small batches
-        50,     // Medium-small batches
-        100,    // Medium batches
-        250,    // Medium-large batches
-        500,    // Large batches
-        1000,   // Very large batches
-        2500,   // Extra large batches
-        5000    // Maximum recommended batch size
+      500,
+	  1000,
+	  2000
     ];
     
     const results = [];

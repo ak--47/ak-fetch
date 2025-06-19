@@ -31,7 +31,7 @@ examples:
 DOCS: https://github.com/ak--47/ak-fetch`)
 		.command('$0', 'bulk fetch calls', () => { })
 		.option("url", {
-			demandOption: true,
+			demandOption: false,
 			describe: 'Target API endpoint URL',
 			type: 'string'
 		})
@@ -262,8 +262,13 @@ DOCS: https://github.com/ak--47/ak-fetch`)
 	// @ts-ignore
 	if (args._.length === 0 && !args.payload) {
 		// @ts-ignore
-		yargs.showHelp();
-		process.exit();
+		if (args.method !== 'GET' && args.method !== 'HEAD' && args.method !== 'OPTIONS') {
+			throw new Error('No data provided. Please specify a file or use --payload to provide inline data.');
+		}
+	}
+
+	if (!args.url) {
+		throw new Error('URL is required. Use --url <endpoint> to specify the target API endpoint.');
 	}
 
 	// Parse JSON arguments
@@ -277,7 +282,7 @@ DOCS: https://github.com/ak--47/ak-fetch`)
 	if (args.retry_on) args.retryOn = parse(args.retry_on);
 	// @ts-ignore
 	if (args.payload) args.data = parse(args.payload);
-	
+
 	// Handle dry run modes
 	// @ts-ignore
 	if (args.dry_run === 'true' || args.dry_run === true) args.dryRun = true;
@@ -285,7 +290,7 @@ DOCS: https://github.com/ak--47/ak-fetch`)
 	else if (args.dry_run === 'curl') args.dryRun = 'curl';
 	// @ts-ignore
 	else if (args.dry_run === 'false' || args.dry_run === false) args.dryRun = false;
-	
+
 	// Handle shell command configuration
 	// @ts-ignore
 	if (args.shell_command) {
@@ -299,7 +304,7 @@ DOCS: https://github.com/ak--47/ak-fetch`)
 			prefix: args.shell_prefix
 		};
 	}
-	
+
 	// Handle retries null value for fire-and-forget
 	// @ts-ignore
 	if (args.retries === 'null' || args.retries === null) args.retries = null;
@@ -323,7 +328,7 @@ DOCS: https://github.com/ak--47/ak-fetch`)
 	if (!args.data && args.method !== 'GET' && args.method !== 'HEAD' && args.method !== 'OPTIONS') {
 		throw new Error('No data provided for ' + args.method + ' request');
 	}
-	
+
 	// Clean up CLI-specific properties
 	// @ts-ignore
 	delete args._;
@@ -341,7 +346,7 @@ DOCS: https://github.com/ak--47/ak-fetch`)
 	delete args.search_params;
 	// @ts-ignore
 	delete args.body_params;
-	
+
 	return args;
 }
 

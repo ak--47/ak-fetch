@@ -1,5 +1,5 @@
 // @ts-nocheck
-const main = require('./index.js');
+const main = require('../../index.js');
 const { execSync } = require("child_process");
 const u = require('ak-tools');
 const { Readable } = require('stream');

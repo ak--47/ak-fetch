@@ -52,12 +52,13 @@ describe('Error Classes', () => {
         });
 
         test('should include timestamp', () => {
-            const beforeCreate = new Date().toISOString();
+            const beforeCreate = Date.now();
             const error = new AkFetchError('Test');
-            const afterCreate = new Date().toISOString();
+            const afterCreate = Date.now();
             
-            expect(error.timestamp).toBeGreaterThanOrEqual(beforeCreate);
-            expect(error.timestamp).toBeLessThanOrEqual(afterCreate);
+            const timestamp = new Date(error.timestamp).getTime();
+            expect(timestamp).toBeGreaterThanOrEqual(beforeCreate);
+            expect(timestamp).toBeLessThanOrEqual(afterCreate);
         });
     });
 

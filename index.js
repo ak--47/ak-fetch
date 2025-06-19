@@ -1,4 +1,5 @@
 #! /usr/bin/env node
+// @ts-check
 
 /**
  * ak-fetch - Modern HTTP client for bulk operations
@@ -28,214 +29,10 @@ const {
     MemoryError 
 } = require('./lib/errors');
 
-/**
- * Configuration object for ak-fetch HTTP requests
- * @typedef {Object} BatchRequestConfig
- * 
- * @description Main configuration object that controls all aspects of HTTP request processing
- * 
- * @property {string} url - The target URL for HTTP requests
- * @example "https://api.example.com/users"
- * 
- * @property {Object[]|string|import('stream').Readable} [data] - Data to be sent in requests
- * @description Can be an array of objects, file path to JSON/JSONL, or a readable stream
- * @example [{ id: 1, name: "John" }, { id: 2, name: "Jane" }]
- * @example "./data.jsonl"
- * @example fs.createReadStream("./large-dataset.jsonl")
- * 
- * @property {number} [batchSize=1] - Number of records per HTTP request
- * @description Groups data into batches. Use 0 to disable batching
- * @example 100 // Send 100 records per request
- * 
- * @property {number} [concurrency=10] - Maximum concurrent HTTP requests
- * @description Controls how many requests run simultaneously
- * @example 5 // Run up to 5 requests at once
- * 
- * @property {number} [maxTasks=25] - Maximum queued tasks before pausing stream
- * @description Prevents memory overflow by controlling queue size
- * @example 50 // Allow up to 50 queued requests
- * 
- * @property {number} [delay=0] - Delay between requests in milliseconds
- * @description Adds intentional delay between requests for rate limiting
- * @example 1000 // Wait 1 second between requests
- * 
- * @property {Object} [searchParams] - URL query parameters
- * @description Object that gets converted to query string
- * @example { api_key: "123", format: "json" } // ?api_key=123&format=json
- * 
- * @property {Object} [bodyParams] - Additional body parameters
- * @description Extra parameters merged with data payload
- * @example { dataKey: "events" } // Wraps data in { events: [...] }
- * 
- * @property {Object} [headers={}] - HTTP headers for requests
- * @description Custom headers sent with each request
- * @example { "Authorization": "Bearer token123", "Content-Type": "application/json" }
- * 
- * @property {boolean} [verbose=true] - Enable detailed logging and progress display
- * @description Shows progress bars, timing, and throughput information
- * @example false // Silent operation
- * 
- * @property {boolean|string} [dryRun=false] - Test mode without making actual requests
- * @description Use "curl" to generate curl commands instead of requests
- * @example "curl" // Generate curl commands
- * @example true // Show request details without sending
- * 
- * @property {string} [logFile] - File path to save response data
- * @description Automatically saves all responses to specified file
- * @example "./responses.json"
- * @example "./results.csv"
- * 
- * @property {number|null} [retries=3] - Number of retry attempts for failed requests
- * @description Use null for fire-and-forget mode (no retries)
- * @example 5 // Retry up to 5 times
- * @example null // No retries, fire-and-forget
- * 
- * @property {number} [retryDelay=1000] - Base delay between retries in milliseconds
- * @description Used with exponential backoff unless useStaticRetryDelay is true
- * @example 2000 // Start with 2 second delay
- * 
- * @property {number[]} [retryOn] - HTTP status codes that trigger retries
- * @description Defaults to [408, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524]
- * @example [500, 502, 503] // Only retry on these status codes
- * 
- * @property {number} [timeout=60000] - Request timeout in milliseconds
- * @description How long to wait for each request to complete
- * @example 30000 // 30 second timeout
- * 
- * @property {boolean} [keepAlive=true] - Use HTTP connection pooling
- * @description Reuses connections for better performance
- * @example false // Disable connection pooling
- * 
- * @property {Object} [shell] - Shell command configuration for dynamic headers
- * @description Execute shell command to get dynamic values (e.g., auth tokens)
- * @example { command: "aws sts get-session-token", header: "Authorization", prefix: "AWS4-HMAC-SHA256" }
- * 
- * @property {string} [method='POST'] - HTTP method to use
- * @description Supports GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS
- * @example "PUT"
- * @example "GET"
- * 
- * @property {boolean} [debug=false] - Enable debug mode with detailed error info
- * @description Provides additional debugging information on failures
- * @example true // Enable debug mode
- * 
- * @property {number} [highWaterMark=16384] - Stream buffer size in bytes
- * @description Controls memory usage for stream processing
- * @example 32768 // 32KB buffer
- * 
- * @property {Function} [transform] - Data transformation function
- * @description Function to modify each data item before sending
- * @example (item) => ({ ...item, timestamp: Date.now() })
- * 
- * @property {Function} [errorHandler] - Custom error handling function
- * @description Function to handle request errors
- * @example (error) => console.log("Request failed:", error.message)
- * 
- * @property {Function} [responseHandler] - Response processing function
- * @description Function called with each successful response
- * @example (response) => console.log("Success:", response.status)
- * 
- * @property {Function} [retryHandler] - Custom retry logic function
- * @description Override default retry behavior
- * @example (error, attempt) => error.status === 429 && attempt < 5
- * 
- * @property {Function} [hook] - Post-processing hook for array configurations
- * @description Function to process all results after completion
- * @example (results) => results.map(r => r.data)
- * 
- * @property {boolean} [storeResponses=true] - Store responses in memory
- * @description Set to false to reduce memory usage for large operations
- * @example false // Don't store responses
- * 
- * @property {boolean} [clone=false] - Clone data before transformation
- * @description Prevents mutation of original data objects
- * @example true // Protect original data
- * 
- * @property {boolean} [forceGC=false] - Force garbage collection after batches
- * @description Helps with memory management in long-running operations
- * @example true // Force GC after each batch
- * 
- * @property {boolean} [noBatch=false] - Disable batching for single requests
- * @description Send data as single request instead of batching
- * @example true // Single request mode
- * 
- * @property {string} [format='json'] - Output format for log files
- * @description Supported formats: json, csv, ndjson
- * @example "csv" // Save as CSV file
- * 
- * @property {boolean} [responseHeaders=false] - Include response headers in output
- * @description Adds HTTP headers to response objects
- * @example true // Include headers
- * 
- * @property {boolean} [enableCookies=false] - Enable automatic cookie handling
- * @description Maintains session cookies across requests
- * @example true // Enable cookie jar
- * 
- * @property {number} [maxResponseBuffer=1000] - Maximum responses kept in memory
- * @description Uses circular buffer to prevent memory overflow
- * @example 500 // Keep last 500 responses
- * 
- * @property {number} [maxMemoryUsage] - Maximum memory usage in bytes before error
- * @description Throws error if memory usage exceeds limit
- * @example 1024 * 1024 * 1024 // 1GB limit
- * 
- * @property {boolean} [useStaticRetryDelay=false] - Use fixed retry delay instead of exponential backoff
- * @description Disables exponential backoff in favor of static delays
- * @example true // Use fixed delays
- * 
- * @property {boolean} [enableConnectionPooling=true] - Enable HTTP connection pooling
- * @description Improves performance by reusing TCP connections
- * @example false // Disable connection pooling
- * 
- * @property {number} [maxFileSize] - Maximum file size for uploads in bytes
- * @description Only used with multipart form data
- * @example 10 * 1024 * 1024 // 10MB limit
- */
 
-/**
- * Result object returned by ak-fetch operations
- * @typedef {Object} Result
- * 
- * @property {Object[]} responses - Array of HTTP response objects from the API
- * @description Each response contains the parsed response data and metadata
- * @example [{ data: { success: true }, status: 200, statusText: "OK" }]
- * 
- * @property {number} duration - Total operation duration in milliseconds
- * @description Time from start to completion of all requests
- * @example 5432 // 5.432 seconds
- * 
- * @property {string} clockTime - Human-readable duration string
- * @description Formatted duration for easy reading
- * @example "5.4s" or "2m 15s"
- * 
- * @property {number} reqCount - Total number of HTTP requests made
- * @description Includes both successful and failed requests
- * @example 150 // Made 150 HTTP requests
- * 
- * @property {number} rowCount - Total number of data records processed
- * @description Number of individual data items that were sent
- * @example 15000 // Processed 15,000 records
- * 
- * @property {number} rps - Requests per second throughput
- * @description Average request rate during the operation
- * @example 27 // 27 requests per second
- * 
- * @property {number} [errors=0] - Number of failed requests
- * @description Count of requests that ultimately failed after retries
- * @example 3 // 3 requests failed
- * 
- * @property {Object} stats - Performance and memory statistics
- * @description Detailed metrics about memory usage and performance
- * @property {number} stats.heapUsed - Heap memory used in MB
- * @property {number} stats.heapTotal - Total heap memory in MB
- * @property {number} stats.external - External memory in MB
- * @property {number} stats.rss - Resident set size in MB
- * @example { heapUsed: 25.5, heapTotal: 50.2, external: 2.1, rss: 75.8 }
- * 
- * @property {number} [configCount] - Number of configurations processed (array mode only)
- * @description Only present when processing multiple configurations
- * @example 5 // Processed 5 different endpoint configurations
- */
+/** @typedef {import("./types").BatchRequestConfig} BatchRequestConfig */
+/** @typedef {import("./types").Result} Result */
+
 
 /**
  * Main ak-fetch function for HTTP request processing
@@ -407,12 +204,6 @@ function validateInput(PARAMS) {
  * is processed independently with shared concurrency limits and timing.
  * Results can be post-processed with a hook function.
  * 
- * @param {BatchRequestConfig[]} configs - Array of configurations to process
- * @description Each config represents a different endpoint or operation
- * 
- * @returns {Promise<Result[]>} Promise resolving to array of results
- * @description Returns array of Result objects or processed results if hook is provided
- * 
  * @throws {ValidationError} When configurations are invalid
  * @throws {NetworkError} When network issues occur
  * @throws {TimeoutError} When operations exceed timeout limits
@@ -439,9 +230,12 @@ function validateInput(PARAMS) {
  * const flatResults = await processMultipleConfigs(configs);
  * 
  * @since 2.0.0
+ * @param {BatchRequestConfig[]} configs - Array of configurations to process ITS RIGHT HERE!!!!!
+ * @returns {Promise<Result>} 
  */
 async function processMultipleConfigs(configs) {
     const startTime = Date.now();
+	/** @type {BatchRequestConfig} */
     const firstConfig = configs[0];
     const concurrency = firstConfig?.concurrency || 10;
     const delay = firstConfig?.delay || 0;
@@ -458,12 +252,14 @@ async function processMultipleConfigs(configs) {
     });
 
     logger.start('Processing multiple endpoints', {
-        endpoints: configs.length,
+        // @ts-ignore
+        count: configs.length,
         concurrency,
         delay: delay ? `${delay}ms` : 'none'
     });
 
     const queue = new RunQueue({ maxConcurrency: concurrency });
+	/** @type {Result[]} */
     const results = [];
     let reqCount = 0;
     let errorCount = 0;
@@ -488,7 +284,9 @@ async function processMultipleConfigs(configs) {
                 logger.progress(reqCount, totalCount);
             } catch (error) {
                 errorCount++;
+                // @ts-ignore
                 logger.error(`Config ${reqCount} failed:`, error.message);
+                // @ts-ignore
                 results.push({ error: error.message, config: sanitizeConfig(config) });
                 
                 logger.progress(reqCount, totalCount);
@@ -512,14 +310,26 @@ async function processMultipleConfigs(configs) {
         responses: finalResults,
         duration,
         clockTime: prettyTime(duration),
-        configCount: totalCount,
+        reqCount,
+        rowCount: reqCount,
         rps: Math.floor(reqCount / (duration / 1000)),
-        errors: errorCount
+        errors: errorCount,
+        configCount: totalCount
     };
 
     logger.complete(finalStats);
 
-    return finalStats;
+    // Return comprehensive stats for multiple configurations
+    return {
+        responses: finalResults,
+        duration,
+        clockTime: prettyTime(duration),
+        reqCount,
+        rowCount: totalCount,
+        rps: Math.floor(reqCount / (duration / 1000)),
+        errors: errorCount,
+        configCount: totalCount
+    };
 }
 
 /**
@@ -579,8 +389,9 @@ async function processSingleConfig(config, isMainJob = true) {
         showMemory: processedConfig.verbose && isMainJob
     });
 
-    // Handle shell commands for dynamic headers
+    // Handle shell commands for dynamic headers (execute even in dry run for testing)
     if (processedConfig.shell) {
+        // @ts-ignore
         processedConfig.headers = await executeShellCommand(processedConfig.shell, processedConfig.headers);
     }
 
@@ -588,11 +399,21 @@ async function processSingleConfig(config, isMainJob = true) {
         logger.start('Starting HTTP request job', sanitizeConfig(processedConfig));
     }
 
+    // Handle dry run mode
+    if (processedConfig.dryRun) {
+        if (processedConfig.dryRun === 'curl') {
+            return await handleCurlGeneration(processedConfig, logger, isMainJob);
+        } else {
+            return await handleDryRun(processedConfig, logger, isMainJob);
+        }
+    }
+
     // Handle no-batch mode (single request)
     if (processedConfig.noBatch) {
         const result = await executeSingleRequest(processedConfig, logger);
         
         if (isMainJob) {
+            // @ts-ignore
             logger.complete(result);
         }
         
@@ -621,6 +442,8 @@ async function processSingleConfig(config, isMainJob = true) {
     // Write log file if specified
     if (processedConfig.logFile && isMainJob) {
         logger.fileOperation('Writing', processedConfig.logFile, processedConfig.format);
+		if (!processedConfig.format) processedConfig.format = 'json';
+		if (processedConfig.verbose === undefined) processedConfig.verbose = false;
         await writeLogFile(
             processedConfig.logFile, 
             responses, 
@@ -665,7 +488,7 @@ async function processSingleConfig(config, isMainJob = true) {
  * @since 2.0.0
  */
 function setDefaults(config) {
-    return {
+    const defaults = {
         batchSize: 1,
         concurrency: 10,
         maxTasks: 25,
@@ -689,11 +512,22 @@ function setDefaults(config) {
         maxResponseBuffer: 1000,
         useStaticRetryDelay: false,
         enableConnectionPooling: true,
+        dryRun: false,
         headers: {},
         searchParams: null,
         bodyParams: null,
+        transform: null,
+        shell: null,
         ...config
     };
+
+    // Fire-and-forget mode: automatically disable response storage when retries is null
+    // (unless explicitly overridden by user)
+    if (defaults.retries === null && !config.hasOwnProperty('storeResponses')) {
+        defaults.storeResponses = false;
+    }
+
+    return defaults;
 }
 
 /**
@@ -735,20 +569,30 @@ function validateConfig(config) {
         throw new ConfigurationError('URL is required');
     }
 
-    if (!config.data && ['POST', 'PUT', 'PATCH'].includes(config.method.toUpperCase())) {
-        throw new ConfigurationError(`${config.method} request requires data`);
+    // Use optional chaining and default values for type safety
+    const method = config.method || 'POST';
+    const batchSize = config.batchSize ?? 1;
+    const concurrency = config.concurrency ?? 10;
+    const timeout = config.timeout ?? 60000;
+
+    if (!config.data && ['POST', 'PUT', 'PATCH'].includes(method.toUpperCase())) {
+        throw new ConfigurationError(`${method} request requires data`);
     }
 
-    if (config.batchSize < 0) {
+    if (batchSize < 0) {
         throw new ConfigurationError('batchSize must be non-negative');
     }
 
-    if (config.concurrency < 1) {
+    if (concurrency < 1) {
         throw new ConfigurationError('concurrency must be at least 1');
     }
 
-    if (config.timeout < 1000) {
+    if (timeout < 1000) {
         throw new ConfigurationError('timeout must be at least 1000ms');
+    }
+
+    if (config.transform !== null && config.transform !== undefined && typeof config.transform !== 'function') {
+        throw new ConfigurationError('transform must be a function or null');
     }
 }
 
@@ -803,6 +647,7 @@ async function executeShellCommand(shellConfig, headers = {}) {
             [headerName]: `${prefix} ${commandOutput}`
         };
     } catch (error) {
+        // @ts-ignore
         throw new ConfigurationError(`Shell command failed: ${error.message}`);
     }
 }
@@ -818,7 +663,7 @@ async function executeShellCommand(shellConfig, headers = {}) {
  * @param {BatchRequestConfig} config - Configuration object for the request
  * @description Must include url, method, and any data to send
  * 
- * @param {Object} logger - Logger instance for output
+ * @param {any} logger - Logger instance for output
  * @description Used for verbose logging and error reporting
  * 
  * @returns {Promise<Result>} Promise resolving to result object
@@ -840,7 +685,27 @@ async function executeShellCommand(shellConfig, headers = {}) {
  * @since 2.0.0
  */
 async function executeSingleRequest(config, logger) {
-    const httpClient = createHttpClient(config);
+    // Create a type-safe configuration with proper defaults
+    const httpClientConfig = {
+        timeout: config.timeout ?? 60000,
+        enableConnectionPooling: config.enableConnectionPooling ?? true,
+        keepAlive: config.keepAlive ?? true,
+        concurrency: config.concurrency ?? 10,
+        retries: config.retries ?? 3,
+        retryDelay: config.retryDelay ?? 1000,
+        retryOn: config.retryOn ?? [408, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524],
+        retryHandler: config.retryHandler || undefined,
+        useStaticRetryDelay: config.useStaticRetryDelay ?? false,
+        enableCookies: config.enableCookies ?? false,
+        maxFileSize: config.maxFileSize ?? undefined,
+        // Include required properties for BatchRequestConfig compatibility
+        url: config.url,
+        data: config.data,
+        method: config.method ?? 'POST',
+        headers: config.headers ?? {}
+    };
+
+    const httpClient = createHttpClient(httpClientConfig);
     
     try {
         if (logger && logger.isVerbose()) {
@@ -849,16 +714,21 @@ async function executeSingleRequest(config, logger) {
         
         const response = await httpClient.request(config);
         
-        return {
+        const endTime = Date.now();
+        const startTime = endTime; // Single request, minimal duration
+        const duration = endTime - startTime;
+        
+        const result = {
             responses: [response],
-            duration: 0,
-            clockTime: '0 seconds',
+            duration,
+            clockTime: prettyTime(duration),
             reqCount: 1,
             rowCount: Array.isArray(config.data) ? config.data.length : 1,
             rps: 0,
             errors: 0,
             stats: getMemoryStats()
         };
+        return result;
     } finally {
         httpClient.destroy();
     }
@@ -872,10 +742,7 @@ async function executeSingleRequest(config, logger) {
  * into a standardized readable stream for processing. Handles JSON, JSONL,
  * file paths, and existing streams with appropriate transformations.
  * 
- * @param {BatchRequestConfig} config - Configuration containing data source
- * @param {Object[]|string|import('stream').Readable} config.data - Data source to convert
- * @param {number} config.highWaterMark - Stream buffer size
- * @param {string} config.method - HTTP method (affects GET/HEAD/OPTIONS handling)
+ * @param {BatchRequestConfig} config - Configuration containing data source 
  * 
  * @returns {Promise<import('stream').Readable>} Promise resolving to readable stream
  * @description Stream will emit data objects ready for batching and HTTP requests
@@ -915,15 +782,27 @@ async function createDataStream(config) {
 
     if (typeof data === 'string') {
         if (existsSync(path.resolve(data))) {
-            // File path
-            return createReadStream(path.resolve(data), { highWaterMark })
-                .pipe(streamProcessors.createJSONLTransform());
+            // File path - check extension to determine if it's JSON or JSONL
+            const filePath = path.resolve(data);
+            const fileExt = path.extname(filePath).toLowerCase();
+            
+            if (fileExt === '.json') {
+                // Regular JSON file - read and parse as array
+                const fileContent = require('fs').readFileSync(filePath, 'utf8');
+                const jsonData = JSON.parse(fileContent);
+                return Readable.from(Array.isArray(jsonData) ? jsonData : [jsonData]);
+            } else {
+                // JSONL file or other text file
+                return createReadStream(filePath, { highWaterMark })
+                    .pipe(streamProcessors.createJSONLTransform());
+            }
         } else if (isJSONStr(data)) {
             // JSON string
-            return Readable.from(JSON.parse(data));
+            const parsed = JSON.parse(data);
+            return Readable.from(Array.isArray(parsed) ? parsed : [parsed]);
         } else if (data.split('\n').every(line => line.trim() === '' || isJSONStr(line))) {
             // JSONL string
-            return Readable.from(data.split('\n').filter(line => line.trim()).map(JSON.parse));
+            return Readable.from(data.split('\n').filter(line => line.trim()).map(line => JSON.parse(line)));
         } else {
             throw new ValidationError('Invalid data format');
         }
@@ -938,7 +817,8 @@ async function createDataStream(config) {
     }
 
     // For GET/HEAD/OPTIONS requests without data
-    if (['GET', 'HEAD', 'OPTIONS'].includes(config.method.toUpperCase())) {
+    const method = config.method || 'POST';
+    if (['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase())) {
         return Readable.from([null]);
     }
 
@@ -957,18 +837,12 @@ async function createDataStream(config) {
  * @description Stream should emit objects ready for HTTP requests
  * 
  * @param {BatchRequestConfig} config - Configuration for processing
- * @param {number} config.batchSize - Items per HTTP request
- * @param {number} config.concurrency - Maximum concurrent requests
- * @param {number} config.maxTasks - Queue size before pausing stream
- * @param {number} config.delay - Delay between requests in ms
- * @param {number} config.maxResponseBuffer - Maximum responses to keep
- * @param {number} [config.maxMemoryUsage] - Memory limit in bytes
- * @param {boolean} config.storeResponses - Whether to store responses
  * 
- * @param {Object} logger - Logger instance for progress tracking
+ * 
+ * @param {any} logger - Logger instance for progress tracking
  * @description Used for progress updates and error reporting
  * 
- * @returns {Promise<Array>} Promise resolving to processing results
+ * @returns {Promise<Array<any>>} Promise resolving to processing results
  * @description Returns [responses, reqCount, rowCount, errorCount] tuple
  * 
  * @throws {MemoryError} When memory usage exceeds configured limits
@@ -994,19 +868,41 @@ async function createDataStream(config) {
  */
 async function processDataStream(stream, config, logger) {
     const {
-        batchSize,
-        concurrency,
-        maxTasks,
-        delay,
-        maxResponseBuffer,
+        batchSize = 1,
+        concurrency = 10,
+        maxTasks = 25,
+        delay = 0,
+        maxResponseBuffer = 1000,
         maxMemoryUsage,
-        storeResponses
+        storeResponses = true,
+        forceGC = false
     } = config;
 
-    const queue = new RunQueue({ maxConcurrency: concurrency });
+    let queue = new RunQueue({ maxConcurrency: concurrency });
     const responseBuffer = storeResponses ? new CircularBuffer(maxResponseBuffer) : null;
     const streamProcessors = new StreamProcessors({ maxMemoryUsage });
-    const httpClient = createHttpClient(config);
+    
+    // Create type-safe http client config with defaults
+    const httpClientConfig = {
+        timeout: config.timeout ?? 60000,
+        enableConnectionPooling: config.enableConnectionPooling ?? true,
+        keepAlive: config.keepAlive ?? true,
+        concurrency: config.concurrency ?? 10,
+        retries: config.retries ?? 3,
+        retryDelay: config.retryDelay ?? 1000,
+        retryOn: config.retryOn ?? [408, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524],
+        retryHandler: config.retryHandler || undefined,
+        useStaticRetryDelay: config.useStaticRetryDelay ?? false,
+        enableCookies: config.enableCookies ?? false,
+        maxFileSize: config.maxFileSize ?? undefined,
+        // Required properties for BatchRequestConfig compatibility
+        url: config.url,
+        data: config.data,
+        method: config.method ?? 'POST',
+        headers: config.headers ?? {}
+    };
+    
+    const httpClient = createHttpClient(httpClientConfig);
 
     let reqCount = 0;
     let rowCount = 0;
@@ -1034,7 +930,34 @@ async function processDataStream(stream, config, logger) {
     // Process stream data
     for await (const data of stream) {
         if (data !== null) {  // Skip null data for GET requests
-            batch.push(data);
+            let processedData = data;
+            
+            // Apply transform function if provided
+            if (typeof config.transform === 'function') {
+                try {
+                    // Clone data if requested to avoid mutations
+                    if (config.clone) {
+                        processedData = typeof data === 'object' && data !== null ? 
+                            JSON.parse(JSON.stringify(data)) : data;
+                    }
+                    
+                    const transformed = config.transform(processedData);
+                    if (transformed !== undefined) {
+                        processedData = transformed;
+                        
+                        // When not cloning, also update the original data object (but only for objects, not arrays)
+                        if (!config.clone && typeof data === 'object' && data !== null && !Array.isArray(data) && typeof transformed === 'object' && !Array.isArray(transformed)) {
+                            Object.assign(data, transformed);
+                        }
+                    }
+                } catch (error) {
+                    // @ts-ignore
+                    logger.error(`Transform error: ${error.message}`);
+                    throw error; // Transform errors should fail the operation
+                }
+            }
+            
+            batch.push(processedData);
             rowCount++;
         }
 
@@ -1078,12 +1001,14 @@ async function processDataStream(stream, config, logger) {
     const responses = responseBuffer ? responseBuffer.toArray() : [];
     
     // Force garbage collection if enabled
-    if (config.forceGC && global.gc) {
+    if (forceGC && global.gc) {
         global.gc();
     }
 
     return [responses, reqCount, rowCount, errorCount];
-
+    /**
+     * @param  {Array<any>} currentBatch
+     */
     function addBatchToQueue(currentBatch) {
         const batchData = currentBatch.slice(); // Create copy
         
@@ -1091,7 +1016,7 @@ async function processDataStream(stream, config, logger) {
             try {
                 const requestConfig = {
                     ...config,
-                    data: currentBatch.length === 1 ? currentBatch[0] : currentBatch
+                    data: batchData.length === 1 ? batchData[0] : batchData
                 };
 
                 const response = await httpClient.request(requestConfig);
@@ -1107,7 +1032,7 @@ async function processDataStream(stream, config, logger) {
                 }
 
                 // Update progress
-                logger.progress(reqCount, Math.ceil(rowCount / batchSize), rowCount);
+                logger.progress(reqCount, Math.ceil(rowCount / (batchSize || 1)), rowCount);
 
                 // Handle response callback
                 if (config.responseHandler && typeof config.responseHandler === 'function') {
@@ -1116,6 +1041,7 @@ async function processDataStream(stream, config, logger) {
 
             } catch (error) {
                 errorCount++;
+                // @ts-ignore
                 logger.error('Batch processing failed:', error.message);
                 
                 if (config.errorHandler && typeof config.errorHandler === 'function') {
@@ -1123,6 +1049,7 @@ async function processDataStream(stream, config, logger) {
                 } else {
                     // Store error in response buffer if enabled
                     if (responseBuffer) {
+                        // @ts-ignore
                         responseBuffer.push({ error: error.message, batch: batchData });
                     }
                 }
@@ -1147,17 +1074,6 @@ async function processDataStream(stream, config, logger) {
  * support based on the provided configuration.
  * 
  * @param {BatchRequestConfig} config - Configuration for HTTP client
- * @param {number} config.timeout - Request timeout in ms
- * @param {boolean} config.enableConnectionPooling - Enable connection pooling
- * @param {boolean} config.keepAlive - Keep connections alive
- * @param {number} config.concurrency - Concurrency level (affects socket pools)
- * @param {number} config.retries - Maximum retry attempts
- * @param {number} config.retryDelay - Base retry delay in ms
- * @param {number[]} config.retryOn - HTTP status codes to retry
- * @param {Function} [config.retryHandler] - Custom retry logic
- * @param {boolean} config.useStaticRetryDelay - Use fixed delays vs exponential backoff
- * @param {boolean} config.enableCookies - Enable cookie jar
- * @param {number} [config.maxFileSize] - Maximum file size for uploads
  * 
  * @returns {HttpClient} Configured HTTP client instance
  * @description Client with connection pooling, retry logic, and session management
@@ -1175,11 +1091,12 @@ async function processDataStream(stream, config, logger) {
  * @since 2.0.0
  */
 function createHttpClient(config) {
+    const concurrency = config.concurrency ?? 10;
     const clientOptions = {
         timeout: config.timeout,
         keepAlive: config.enableConnectionPooling ? config.keepAlive : false,
-        maxSockets: config.concurrency * 2,
-        maxFreeSockets: config.concurrency,
+        maxSockets: concurrency * 2,
+        maxFreeSockets: concurrency,
         retry: {
             maxRetries: config.retries,
             baseDelay: config.retryDelay,
@@ -1249,6 +1166,7 @@ async function writeLogFile(filePath, data, format, verbose) {
         }
     } catch (error) {
         const logger = createLogger({ verbose: true });
+        // @ts-ignore
         logger.error(`Failed to write log file: ${error.message}`);
     }
 }
@@ -1261,10 +1179,10 @@ async function writeLogFile(filePath, data, format, verbose) {
  * or masked. Prevents secrets from appearing in logs while preserving
  * useful debugging information.
  * 
- * @param {Object} config - Configuration object to sanitize
+ * @param {BatchRequestConfig} config - Configuration object to sanitize
  * @description Original object is not modified
  * 
- * @returns {Object} Sanitized configuration object
+ * @returns {BatchRequestConfig} Sanitized configuration object
  * @description Copy with sensitive headers masked and data removed
  * 
  * @example
@@ -1301,6 +1219,7 @@ function sanitizeConfig(config) {
         
         Object.keys(sanitized.headers).forEach(key => {
             if (sensitiveHeaders.includes(key.toLowerCase())) {
+                // @ts-ignore
                 sanitized.headers[key] = '[REDACTED]';
             }
         });
@@ -1340,6 +1259,223 @@ function getMemoryStats() {
 }
 
 /**
+ * Handle curl generation mode - generate curl commands instead of making requests
+ * 
+ * @description
+ * Processes configuration to generate curl commands that would be equivalent
+ * to the HTTP requests that would be made. Useful for debugging, sharing,
+ * and understanding what requests would be sent.
+ * 
+ * @param {BatchRequestConfig} config - Configuration object for curl generation
+ * @param {any} logger - Logger instance for output
+ * @param {boolean} isMainJob - Whether this is the primary operation
+ * @returns {Promise<Result>} Promise resolving to result with curl commands
+ * 
+ * @example
+ * const result = await handleCurlGeneration(config, logger, true);
+ * console.log(result.responses[0]); // "curl -X POST https://api.example.com/data ..."
+ * 
+ * @since 2.0.0
+ */
+async function handleCurlGeneration(config, logger, isMainJob) {
+    const startTime = Date.now();
+    
+    if (logger.isVerbose()) {
+        logger.info('Generating curl commands - no actual requests will be made');
+    }
+
+    // Create data stream to process items
+    const stream = await createDataStream(config);
+    let rowCount = 0;
+    const curlCommands = [];
+
+    // Process data items and generate curl commands
+    for await (const data of stream) {
+        if (data !== null) {
+            rowCount++;
+            
+            let processedData = data;
+            
+            // Apply transform for curl generation if provided
+            if (typeof config.transform === 'function') {
+                try {
+                    if (config.clone) {
+                        processedData = typeof data === 'object' && data !== null ? 
+                            JSON.parse(JSON.stringify(data)) : data;
+                    }
+                    
+                    const transformed = config.transform(processedData);
+                    if (transformed !== undefined) {
+                        processedData = transformed;
+                    }
+                } catch (error) {
+                    logger.error(`Transform error in curl generation: ${error.message}`);
+                    throw error;
+                }
+            }
+            
+            // Generate curl command for this data item
+            const curlCommand = generateCurlCommand(config, processedData);
+            curlCommands.push(curlCommand);
+        }
+    }
+
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+
+    const result = {
+        responses: curlCommands,
+        duration,
+        clockTime: prettyTime(duration),
+        reqCount: 0, // No actual requests made
+        rowCount,
+        rps: 0,
+        errors: 0,
+        stats: getMemoryStats()
+    };
+
+    if (isMainJob) {
+        logger.complete(result);
+    }
+
+    return result;
+}
+
+/**
+ * Generate a curl command for a given configuration and data
+ * 
+ * @description
+ * Creates a curl command string that represents the HTTP request
+ * that would be made with the given configuration and data.
+ * 
+ * @param {BatchRequestConfig} config - Request configuration
+ * @param {any} data - Data payload for the request
+ * @returns {string} Curl command string
+ * 
+ * @since 2.0.0
+ */
+function generateCurlCommand(config, data) {
+    const parts = ['curl'];
+    
+    // Add method
+    if (config.method && config.method !== 'GET') {
+        parts.push(`-X ${config.method}`);
+    }
+    
+    // Add headers
+    if (config.headers) {
+        Object.entries(config.headers).forEach(([key, value]) => {
+            parts.push(`-H "${key}: ${value}"`);
+        });
+    }
+    
+    // Add data payload for POST/PUT/PATCH methods
+    if (['POST', 'PUT', 'PATCH'].includes(config.method?.toUpperCase()) && data) {
+        const payload = typeof data === 'string' ? data : JSON.stringify(data);
+        parts.push(`-d '${payload}'`);
+        
+        // Add content-type if not already specified
+        const hasContentType = config.headers && 
+            Object.keys(config.headers).some(key => key.toLowerCase() === 'content-type');
+        if (!hasContentType) {
+            parts.push(`-H "Content-Type: application/json"`);
+        }
+    }
+    
+    // Add URL with search params
+    let url = config.url;
+    if (config.searchParams) {
+        const params = new URLSearchParams(config.searchParams);
+        url += `?${params.toString()}`;
+    }
+    parts.push(`"${url}"`);
+    
+    return parts.join(' ');
+}
+
+/**
+ * Handle dry run mode - simulate operations without making actual requests
+ * 
+ * @description
+ * Processes configuration in dry run mode, counting data items and simulating
+ * request processing without making actual HTTP calls. Useful for testing
+ * configuration validity and estimating request counts.
+ * 
+ * @param {BatchRequestConfig} config - Configuration object for dry run
+ * @param {any} logger - Logger instance for output
+ * @param {boolean} isMainJob - Whether this is the primary operation
+ * @returns {Promise<Result>} Promise resolving to simulated result
+ * 
+ * @example
+ * const result = await handleDryRun(config, logger, true);
+ * console.log(`Would make ${result.reqCount} requests for ${result.rowCount} items`);
+ * 
+ * @since 2.0.0
+ */
+async function handleDryRun(config, logger, isMainJob) {
+    const startTime = Date.now();
+    
+    if (logger.isVerbose()) {
+        logger.info('Running in dry run mode - no actual requests will be made');
+    }
+
+    // Create data stream to count items
+    const stream = await createDataStream(config);
+    let rowCount = 0;
+    const responses = [];
+
+    // Count data items and simulate batching
+    for await (const data of stream) {
+        if (data !== null) {
+            rowCount++;
+            
+            // Apply transform for testing if provided
+            if (typeof config.transform === 'function') {
+                try {
+                    let processedData = data;
+                    if (config.clone) {
+                        processedData = typeof data === 'object' && data !== null ? 
+                            JSON.parse(JSON.stringify(data)) : data;
+                    }
+                    
+                    const transformed = config.transform(processedData);
+                    
+                    // When not cloning, the transform should mutate the original data (but only for objects, not arrays)
+                    // This ensures the dry run behaves the same as real execution
+                    if (!config.clone && transformed !== undefined && typeof data === 'object' && data !== null && !Array.isArray(data) && typeof transformed === 'object' && !Array.isArray(transformed)) {
+                        Object.assign(data, transformed);
+                    }
+                } catch (error) {
+                    logger.error(`Transform error in dry run: ${error.message}`);
+                    throw error; // Re-throw transform errors in dry run mode
+                }
+            }
+        }
+    }
+
+    const reqCount = config.batchSize > 0 ? Math.ceil(rowCount / config.batchSize) : Math.max(1, rowCount);
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+
+    const result = {
+        responses,
+        duration,
+        clockTime: prettyTime(duration),
+        reqCount: 0, // No actual requests made
+        rowCount,
+        rps: 0,
+        errors: 0,
+        stats: getMemoryStats()
+    };
+
+    if (isMainJob) {
+        logger.complete(result);
+    }
+
+    return result;
+}
+
+/**
  * Convert milliseconds to human-readable time string
  * 
  * @description
@@ -1375,13 +1511,13 @@ function prettyTime(milliseconds) {
         [Math.floor((((totalSeconds % 31536000) % 86400) % 3600) / 60), 'minutes']
     ];
     
-    const seconds = (totalSeconds % 60).toFixed(2);
+    const seconds = parseFloat((totalSeconds % 60).toFixed(2));
     levels.push([seconds, 'seconds']);
     
     let result = '';
     for (let i = 0; i < levels.length; i++) {
-        if (levels[i][0] == 0 || (i === levels.length - 1 && levels[i][0] == "0.00")) continue;
-        const unit = levels[i][0] === 1 ? levels[i][1].slice(0, -1) : levels[i][1];
+        if (levels[i][0] == 0 || (i === levels.length - 1 && levels[i][0] == 0)) continue;
+        const unit = levels[i][0] === 1 ? String(levels[i][1]).slice(0, -1) : levels[i][1];
         result += ` ${levels[i][0]} ${unit}`;
     }
     
