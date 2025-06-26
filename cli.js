@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 const yargs = require('yargs');
 const { version } = /** @type {{ version: string }} */ (require('./package.json'));
 const u = require('ak-tools');
@@ -393,5 +395,22 @@ function parse(val, defaultVal = undefined) {
 	return val;
 }
 
+
+// Execute CLI when run directly
+if (require.main === module) {
+	(async () => {
+		try {
+			const akFetch = require('./index.js');
+			const config = await cliParams();
+			const result = await akFetch(config);
+			if (result && typeof result === 'object') {
+				process.exit(0);
+			}
+		} catch (error) {
+			console.error('Error:', error.message);
+			process.exit(1);
+		}
+	})();
+}
 
 module.exports = cliParams;

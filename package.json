@@ -1,14 +1,15 @@
 {
 	"name": "ak-fetch",
-	"version": "2",
-	"description": "a batching queuing fetch the ak way",
+	"version": "2.0.0",
+	"description": "Production-ready HTTP client for bulk operations with connection pooling, exponential backoff, streaming, and comprehensive error handling",
 	"main": "index.js",
 	"types": "types.d.ts",
 	"files": [
 		"index.js",
 		"types.d.ts",
 		"lib/",
-		"cli.js"
+		"cli.js",
+		"README.md"
 	],
 	"scripts": {
 		"test": "jest --testPathPattern='test/(unit|integration)' --verbose",
@@ -27,7 +28,7 @@
 		"url": "git+https://github.com/ak--47/ak-fetch.git"
 	},
 	"bin": {
-		"ak-fetch": "./index.js"
+		"ak-fetch": "./cli.js"
 	},
 	"author": "AK",
 	"license": "ISC",
@@ -35,6 +36,26 @@
 		"url": "https://github.com/ak--47/ak-fetch/issues"
 	},
 	"homepage": "https://github.com/ak--47/ak-fetch#readme",
+	"keywords": [
+		"fetch",
+		"http",
+		"bulk",
+		"batch",
+		"api",
+		"client",
+		"request",
+		"retry",
+		"streaming",
+		"performance",
+		"connection-pooling",
+		"exponential-backoff",
+		"multipart",
+		"upload",
+		"concurrent"
+	],
+	"engines": {
+		"node": ">=16"
+	},
 	"devDependencies": {
 		"@types/jest": "^30.0.0",
 		"@types/mocha": "^10.0.10",
