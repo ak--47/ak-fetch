@@ -1,5 +1,5 @@
 const yargs = require('yargs');
-const { version } = require('./package.json');
+const { version } = /** @type {{ version: string }} */ (require('./package.json'));
 const u = require('ak-tools');
 const { createLogger } = require('./lib/logger');
 

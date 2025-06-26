@@ -228,6 +228,23 @@ const result = await akFetch({
 });
 ```
 
+### Fire-and-Forget Mode
+
+For maximum performance when you don't need response data:
+
+```javascript
+const result = await akFetch({
+    url: 'https://api.example.com/events',
+    data: largeDataset,
+    retries: null,              // Fire-and-forget mode
+    batchSize: 1000,
+    concurrency: 50
+});
+
+// result.responses will be empty array []
+// Only metadata (reqCount, duration, etc.) is returned
+```
+
 ### Custom Error Handling and Transformation
 
 ```javascript
@@ -292,11 +309,20 @@ console.log(`
 
 ## 📊 Response Object
 
-The response object contains comprehensive metrics:
+The response object contains comprehensive metrics and response data:
 
 ```javascript
 {
-    responses: [...],           // Array of API responses
+    responses: [               // Array of structured API responses
+        {
+            data: {...},       // Actual response content from API
+            status: 200,       // HTTP status code
+            statusText: "OK",  // HTTP status text
+            url: "https://api.example.com", // Request URL
+            method: "POST",    // HTTP method used
+            headers: {...}     // Response headers (when responseHeaders: true)
+        }
+    ],
     duration: 30000,           // Total time in milliseconds
     clockTime: "30.0s",        // Human-readable duration
     reqCount: 150,             // Number of HTTP requests made
@@ -311,6 +337,39 @@ The response object contains comprehensive metrics:
     }
 }
 ```
+
+### Response Structure Details
+
+Each response in the `responses` array contains:
+- **`data`**: The actual response body from the API (parsed JSON, text, etc.)
+- **`status`**: HTTP status code (200, 404, 500, etc.)
+- **`statusText`**: HTTP status message ("OK", "Not Found", etc.)
+- **`url`**: The full URL that was requested
+- **`method`**: HTTP method used ("GET", "POST", etc.)
+- **`headers`**: Response headers object (only when `responseHeaders: true`)
+
+### Multiple Configurations
+
+When processing multiple configurations (array of config objects), the response structure depends on whether a `hook` function is provided:
+
+```javascript
+// Without hook - returns array of individual results
+const results = await akFetch([config1, config2, config3]);
+// results.responses = [result1, result2, result3]
+
+// With hook - returns processed/aggregated result
+const results = await akFetch([config1, config2, config3], { 
+    hook: (individualResults) => processResults(individualResults)
+});
+// results.responses = whatever hook function returns
+```
+
+### Special Response Modes
+
+- **Fire-and-forget** (`retries: null`): `responses` array will be empty for memory efficiency
+- **Dry run** (`dryRun: true`): Returns request configuration objects instead of actual responses
+- **Curl mode** (`dryRun: "curl"`): Returns curl command strings
+- **GET without data**: Returns raw response content directly (not wrapped in response object)
 
 ## 🧪 Testing & Development
 

@@ -254,11 +254,29 @@ export interface BatchRequestConfig {
 }
 
 /**
+ * Individual HTTP response object structure
+ */
+export interface HttpResponse {
+  /** Actual response content from the API (parsed JSON, text, etc.) */
+  data: any;
+  /** HTTP status code (200, 404, 500, etc.) */
+  status: number;
+  /** HTTP status message ("OK", "Not Found", etc.) */
+  statusText: string;
+  /** The full URL that was requested */
+  url: string;
+  /** HTTP method used ("GET", "POST", etc.) */
+  method: string;
+  /** Response headers object (only when responseHeaders: true) */
+  headers?: Record<string, string>;
+}
+
+/**
  * Result object returned by ak-fetch operations
  */
 export interface Result {
-  /** Array of HTTP response objects from the API */
-  responses: any[];
+  /** Array of structured HTTP response objects from the API, or strings in curl/dry-run mode */
+  responses: HttpResponse[] | string[] | any[];
 
   /** Total operation duration in milliseconds */
   duration: number;

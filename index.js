@@ -442,7 +442,7 @@ async function processSingleConfig(config, isMainJob = true) {
     // Write log file if specified
     if (processedConfig.logFile && isMainJob) {
         logger.fileOperation('Writing', processedConfig.logFile, processedConfig.format);
-		if (!processedConfig.format) processedConfig.format = 'json';
+		if (!processedConfig.format) processedConfig.format = /** @type {"json"} */ ('json');
 		if (processedConfig.verbose === undefined) processedConfig.verbose = false;
         await writeLogFile(
             processedConfig.logFile, 
@@ -507,7 +507,7 @@ function setDefaults(config) {
         forceGC: false,
         clone: false,
         noBatch: false,
-        format: 'json',
+        format: /** @type {"json"|"csv"|"ndjson"} */ ('json'),
         enableCookies: false,
         maxResponseBuffer: 1000,
         useStaticRetryDelay: false,
