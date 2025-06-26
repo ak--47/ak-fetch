@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "checkJs": true,
+    "allowJs": true,
+    "target": "ES2020",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "strict": true,
+    "baseUrl": ".",                 // allows relative imports from root
+    "paths": {
+      "*": ["*"]
+    }
+  },
+  "include": ["./**/*.js"],
+  "exclude": ["node_modules"]
+}

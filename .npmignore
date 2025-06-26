@@ -1,0 +1,40 @@
+# Test files and directories
+test/
+coverage/
+*.test.js
+*.spec.js
+
+# Development files
+benchmarks/
+scratch.mjs
+jest.config.json
+jsconfig.json
+CLAUDE.md
+
+# Logs and temp files
+logs/
+*.log
+.env*
+
+# Development data
+testData/
+
+# TypeScript build artifacts
+*.tsbuildinfo
+
+# IDE files
+.vscode/
+.DS_Store
+
+# CI/CD
+.github/
+
+# Documentation source files (keep README.md)
+docs/
+
+# Package files that npm generates
+*.tgz
+package-lock.json
+
+# Coverage reports
+lcov.info
