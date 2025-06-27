@@ -145,9 +145,8 @@ DOCS: https://github.com/ak--47/ak-fetch`)
 		})
 		.option("format", {
 			demandOption: false,
-			describe: 'Output format for log files',
+			describe: 'Output format for log files (auto-detected from file extension if not specified)',
 			type: 'string',
-			default: 'json',
 			choices: ['json', 'csv', 'ndjson']
 		})
 		.option("verbose", {
@@ -338,6 +337,23 @@ DOCS: https://github.com/ak--47/ak-fetch`)
 	// Handle retries null value for fire-and-forget
 	// @ts-ignore
 	if (args.retries === 'null' || args.retries === null) args.retries = null;
+
+	// Auto-detect format from log file extension if not explicitly specified
+	// @ts-ignore
+	if (args.log_file && !args.format) {
+		// @ts-ignore
+		const ext = args.log_file.toLowerCase().split('.').pop();
+		if (ext === 'ndjson' || ext === 'jsonl') {
+			// @ts-ignore
+			args.format = 'ndjson';
+		} else if (ext === 'csv') {
+			// @ts-ignore
+			args.format = 'csv';
+		} else {
+			// @ts-ignore
+			args.format = 'json';
+		}
+	}
 
 	// Handle file input
 	// @ts-ignore

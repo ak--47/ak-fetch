@@ -443,7 +443,6 @@ async function processSingleConfig(config, isMainJob = true) {
     // Write log file if specified
     if (processedConfig.logFile && isMainJob) {
         logger.fileOperation('Writing', processedConfig.logFile, processedConfig.format);
-		if (!processedConfig.format) processedConfig.format = /** @type {"json"} */ ('json');
 		if (processedConfig.verbose === undefined) processedConfig.verbose = false;
         await writeLogFile(
             processedConfig.logFile, 
@@ -918,14 +917,12 @@ async function processDataStream(stream, config, logger) {
 
     stream.on('error', error => {
         logger.error('Stream error:', error.message);
-        cleanup();
     });
 
     stream.on('end', () => {
         if (logger.isVerbose()) {
             logger.info(`Stream ended: processed ${comma(rowCount)} records, ${comma(reqCount)} requests`);
         }
-        cleanup();
     });
 
     // Process stream data
@@ -1008,7 +1005,9 @@ async function processDataStream(stream, config, logger) {
     }
 
     // Wait for all requests to complete
-    await queue.run();
+    if (queue.queued > 0) {
+        await queue.run();
+    }
     
     // Cleanup
     cleanup();
@@ -1065,8 +1064,21 @@ async function processDataStream(stream, config, logger) {
                 } else {
                     // Store error in response buffer if enabled
                     if (responseBuffer) {
+                        // Include full error details including response body
+                        const errorDetails = {
+                            error: error.message,
+                            batch: batchData
+                        };
+                        
+                        // Add optional error properties if they exist
+                        if (error.statusCode) errorDetails.statusCode = error.statusCode;
+                        if (error.body) errorDetails.body = error.body;
+                        if (error.url) errorDetails.url = error.url;
+                        if (error.method) errorDetails.method = error.method;
+                        if (error.timestamp) errorDetails.timestamp = error.timestamp;
+                        
                         // @ts-ignore
-                        responseBuffer.push({ error: error.message, batch: batchData });
+                        responseBuffer.push(errorDetails);
                     }
                 }
             }
