@@ -157,7 +157,14 @@ export interface BatchRequestConfig {
   highWaterMark?: number;
 
   /**
-   * Function to modify each data item before sending
+   * Apply vendor-specific data transformation preset (runs before user transform)
+   * @example "mixpanel"
+   * @example "amplitude"
+   */
+  preset?: string;
+
+  /**
+   * Function to modify each data item before sending (runs after preset transform)
    */
   transform?: (item: any) => any;
 
@@ -251,6 +258,18 @@ export interface BatchRequestConfig {
    * Maximum file size for uploads in bytes
    */
   maxFileSize?: number;
+
+  /**
+   * Show transformed data in console during dry-run mode
+   * @default false
+   */
+  showData?: boolean;
+
+  /**
+   * Show first 3 transformed records in console during dry-run mode
+   * @default false
+   */
+  showSample?: boolean;
 }
 
 /**

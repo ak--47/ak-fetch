@@ -49,7 +49,7 @@ DOCS: https://github.com/ak--47/ak-fetch`)
 			demandOption: false,
 			describe: 'Records per HTTP request (0 disables batching)',
 			type: 'number',
-			default: 1
+			default: 2
 		})
 		.option("concurrency", {
 			demandOption: false,
@@ -107,8 +107,28 @@ DOCS: https://github.com/ak--47/ak-fetch`)
 			alias: 'dryRun',
 			demandOption: false,
 			default: false,
-			describe: 'Test mode: true or "curl" for curl commands',
-			type: 'string'
+			describe: 'Test mode: simulate requests without making them',
+			type: 'boolean'
+		})
+		.option("curl", {
+			demandOption: false,
+			default: false,
+			describe: 'Generate curl commands instead of making requests',
+			type: 'boolean'
+		})
+		.option("show_data", {
+			alias: 'showData',
+			demandOption: false,
+			default: false,
+			describe: 'Show first 100 transformed records in dry-run mode (useful with --preset)',
+			type: 'boolean'
+		})
+		.option("show_sample", {
+			alias: 'showSample',
+			demandOption: false,
+			default: false,
+			describe: 'Show first 3 transformed records in dry-run mode',
+			type: 'boolean'
 		})
 		.option("no_batch", {
 			alias: 'noBatch',
@@ -258,6 +278,12 @@ DOCS: https://github.com/ak--47/ak-fetch`)
 			type: 'string',
 			default: 'Bearer'
 		})
+		.option("preset", {
+			demandOption: false,
+			describe: 'Apply vendor-specific data transformation preset',
+			type: 'string',
+			choices: ['mixpanel', 'amplitude', 'pendo']
+		})
 		.help()
 		.wrap(null)
 		.argv;
@@ -275,7 +301,9 @@ DOCS: https://github.com/ak--47/ak-fetch`)
 
 	// Parse JSON arguments
 	// @ts-ignore
-	if (args.headers) args.headers = parse(args.headers);
+	if (args.headers) {
+		args.headers = parse(args.headers);
+	}
 	// @ts-ignore
 	if (args.search_params) args.searchParams = parse(args.search_params);
 	// @ts-ignore
@@ -287,11 +315,11 @@ DOCS: https://github.com/ak--47/ak-fetch`)
 
 	// Handle dry run modes
 	// @ts-ignore
-	if (args.dry_run === 'true' || args.dry_run === true) args.dryRun = true;
+	if (args.curl) args.dryRun = 'curl';
 	// @ts-ignore
-	else if (args.dry_run === 'curl') args.dryRun = 'curl';
+	else if (args.dry_run) args.dryRun = true;
 	// @ts-ignore
-	else if (args.dry_run === 'false' || args.dry_run === false) args.dryRun = false;
+	else args.dryRun = false;
 
 	// Handle shell command configuration
 	// @ts-ignore
