@@ -989,18 +989,14 @@ async function processDataStream(stream, config, logger) {
 
         // Pause stream if queue is full
         if (queue.queued >= maxTasks && !isStreamPaused) {
-            if (logger.isVerbose()) {
-                logger.info(`Pausing stream: queue size ${queue.queued}/${maxTasks}`);
-            }
+            // Suppressed: Pausing stream message to avoid jittery output
             stream.pause();
             isStreamPaused = true;
             
             await queue.run();
             queue = new RunQueue({ maxConcurrency: concurrency });
             
-            if (logger.isVerbose()) {
-                logger.info(`Resuming stream: ${comma(reqCount)} requests completed`);
-            }
+            // Suppressed: Resuming stream message to avoid jittery output
             stream.resume();
             isStreamPaused = false;
         }
