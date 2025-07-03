@@ -1,16 +1,25 @@
+//@ts-nocheck
 /**
  * Connection Pooling Performance Benchmark
  * 
- * Compares performance with and without HTTP connection pooling
- * to demonstrate the benefits of keep-alive connections.
+ * Compares performance with and without HTTP connection pooling against Mixpanel API
+ * to demonstrate the benefits of keep-alive connections for analytics workloads.
  */
 
-const akFetch = require('../index.js');
-const { performance } = require('perf_hooks');
-const fs = require('fs');
+import akFetch from '../index.js';
+import { performance } from 'perf_hooks';
+import fs from 'fs';
+import dotenv from 'dotenv';
+dotenv.config();
 
-// Mock HTTP server endpoint for testing
-const TEST_URL = 'https://httpbin.org/post';
+// Mixpanel Import API endpoint
+const TEST_URL = 'https://api.mixpanel.com/import';
+const MIXPANEL_AUTH = process.env.MIXPANEL_AUTH;
+
+if (!MIXPANEL_AUTH) {
+    console.error('❌ MIXPANEL_AUTH environment variable not set');
+    process.exit(1);
+}
 
 /**
  * Run connection pooling comparison test
@@ -28,15 +37,22 @@ async function runConnectionPoolingTest(enablePooling, testSize = '100k') {
         const result = await akFetch({
             url: TEST_URL,
             data: dataFile,
-            batchSize: 100,
+            batchSize: 2000, // Optimal Mixpanel batch size
             concurrency: 15,
             verbose: false,
             retries: 3,
-            timeout: 30000,
+            timeout: 60000, // Increased timeout for Mixpanel
             enableConnectionPooling: enablePooling,
             keepAlive: enablePooling,
             storeResponses: false,
-            maxResponseBuffer: 10
+            maxResponseBuffer: 10,
+            headers: {
+                'Authorization': MIXPANEL_AUTH,
+                'Content-Type': 'application/json'
+            },
+            searchParams: {
+                strict: 1
+            }
         });
         
         const endTime = performance.now();
@@ -85,7 +101,158 @@ async function runConnectionPoolingTest(enablePooling, testSize = '100k') {
 }
 
 /**
- * Test different concurrency levels with and without pooling
+ * Run comprehensive connection pooling benchmark
  */
-async function runConcurrencyComparisonTest(concurrency, testSize = '100k') {
-    console.log(`\\n🚀 Testing concurrency ${concurrency} with/without connection pooling:`);\n    \n    const results = [];\n    \n    // Test without connection pooling\n    const withoutPooling = await runConnectionPoolingTest(false, testSize);\n    withoutPooling.concurrency = concurrency;\n    results.push(withoutPooling);\n    \n    // Brief pause\n    await new Promise(resolve => setTimeout(resolve, 2000));\n    \n    // Test with connection pooling\n    const withPooling = await runConnectionPoolingTest(true, testSize);\n    withPooling.concurrency = concurrency;\n    results.push(withPooling);\n    \n    return results;\n}\n\n/**\n * Run comprehensive connection pooling benchmark\n */\nasync function runConnectionPoolingBenchmark() {\n    console.log('🔌 ak-fetch Connection Pooling Benchmark\\n');\n    console.log('Comparing performance with and without HTTP connection pooling...\\n');\n    \n    const results = [];\n    \n    // Basic comparison with 100k dataset\n    console.log('📊 Basic Comparison (100k dataset):');\n    \n    const basicWithout = await runConnectionPoolingTest(false, '100k');\n    results.push(basicWithout);\n    \n    await new Promise(resolve => setTimeout(resolve, 2000));\n    \n    const basicWith = await runConnectionPoolingTest(true, '100k');\n    results.push(basicWith);\n    \n    // Test different concurrency levels\n    console.log('\\n📊 Concurrency Level Comparison:');\n    const concurrencyLevels = [5, 10, 20, 30];\n    \n    for (const concurrency of concurrencyLevels) {\n        const concurrencyResults = await runConcurrencyComparisonTest(concurrency);\n        results.push(...concurrencyResults);\n        \n        await new Promise(resolve => setTimeout(resolve, 3000));\n    }\n    \n    // Large dataset test\n    console.log('\\n📊 Large Dataset Test (1M records):');\n    \n    const largeWithout = await runConnectionPoolingTest(false, '1m');\n    results.push(largeWithout);\n    \n    await new Promise(resolve => setTimeout(resolve, 5000));\n    \n    const largeWith = await runConnectionPoolingTest(true, '1m');\n    results.push(largeWith);\n    \n    // Save results\n    await saveResults('connection-pooling-benchmark', results);\n    \n    // Generate report\n    generateConnectionPoolingReport(results);\n}\n\n/**\n * Generate connection pooling performance report\n */\nfunction generateConnectionPoolingReport(results) {\n    console.log('\\n🔌 CONNECTION POOLING PERFORMANCE REPORT');\n    console.log('═'.repeat(70));\n    \n    const validResults = results.filter(r => !r.failed && r.performance);\n    \n    if (validResults.length === 0) {\n        console.log('❌ No valid results to report');\n        return;\n    }\n    \n    // Basic comparison\n    console.log('\\nBasic Performance Comparison (100k dataset):');\n    console.log('Connection Pooling | Records/sec | Req/sec | Avg Req (ms) | Errors');\n    console.log('-'.repeat(65));\n    \n    const basicResults = validResults.filter(r => r.testSize === '100k' && !r.concurrency);\n    basicResults.forEach(result => {\n        const p = result.performance;\n        console.log(\n            `${(result.connectionPooling ? 'ENABLED' : 'DISABLED').padEnd(17)} | ` +\n            `${p.recordsPerSecond.toString().padStart(10)} | ` +\n            `${p.rps.toString().padStart(6)} | ` +\n            `${p.avgRequestDuration.padStart(11)} | ` +\n            `${p.errorRate}%`\n        );\n    });\n    \n    // Performance improvement calculation\n    const withoutPooling = basicResults.find(r => !r.connectionPooling);\n    const withPooling = basicResults.find(r => r.connectionPooling);\n    \n    if (withoutPooling && withPooling) {\n        const speedImprovement = ((withPooling.performance.recordsPerSecond - withoutPooling.performance.recordsPerSecond) / withoutPooling.performance.recordsPerSecond * 100).toFixed(1);\n        const requestImprovement = ((withPooling.performance.rps - withoutPooling.performance.rps) / withoutPooling.performance.rps * 100).toFixed(1);\n        const latencyImprovement = ((parseFloat(withoutPooling.performance.avgRequestDuration) - parseFloat(withPooling.performance.avgRequestDuration)) / parseFloat(withoutPooling.performance.avgRequestDuration) * 100).toFixed(1);\n        \n        console.log('\\n📈 CONNECTION POOLING BENEFITS:');\n        console.log(`   Throughput Improvement: ${speedImprovement}% faster record processing`);\n        console.log(`   Request Rate Improvement: ${requestImprovement}% more requests per second`);\n        console.log(`   Latency Improvement: ${latencyImprovement}% faster average request time`);\n    }\n    \n    // Concurrency analysis\n    const concurrencyResults = validResults.filter(r => r.concurrency && r.testSize === '100k');\n    if (concurrencyResults.length > 0) {\n        console.log('\\n🚀 CONCURRENCY LEVEL ANALYSIS:');\n        console.log('Concurrency | Pooling | Records/sec | Improvement');\n        console.log('-'.repeat(50));\n        \n        const concurrencyLevels = [...new Set(concurrencyResults.map(r => r.concurrency))].sort((a, b) => a - b);\n        \n        concurrencyLevels.forEach(concurrency => {\n            const without = concurrencyResults.find(r => r.concurrency === concurrency && !r.connectionPooling);\n            const with_ = concurrencyResults.find(r => r.concurrency === concurrency && r.connectionPooling);\n            \n            if (without && with_) {\n                const improvement = ((with_.performance.recordsPerSecond - without.performance.recordsPerSecond) / without.performance.recordsPerSecond * 100).toFixed(1);\n                \n                console.log(`${concurrency.toString().padStart(10)} | DISABLED | ${without.performance.recordsPerSecond.toString().padStart(10)} | baseline`);\n                console.log(`${concurrency.toString().padStart(10)} | ENABLED  | ${with_.performance.recordsPerSecond.toString().padStart(10)} | +${improvement}%`);\n                console.log('-'.repeat(50));\n            }\n        });\n    }\n    \n    // Large dataset results\n    const largeResults = validResults.filter(r => r.testSize === '1m' && !r.concurrency);\n    if (largeResults.length >= 2) {\n        console.log('\\n📊 LARGE DATASET PERFORMANCE (1M records):');\n        \n        const largeWithout = largeResults.find(r => !r.connectionPooling);\n        const largeWith = largeResults.find(r => r.connectionPooling);\n        \n        if (largeWithout && largeWith) {\n            console.log('Configuration     | Duration | Records/sec | Memory (MB)');\n            console.log('-'.repeat(55));\n            console.log(\n                `Without Pooling  | ${largeWithout.performance.durationSeconds.padStart(7)}s | ` +\n                `${largeWithout.performance.recordsPerSecond.toString().padStart(10)} | ` +\n                `${largeWithout.memory.peakHeapUsed.toString().padStart(10)}`\n            );\n            console.log(\n                `With Pooling     | ${largeWith.performance.durationSeconds.padStart(7)}s | ` +\n                `${largeWith.performance.recordsPerSecond.toString().padStart(10)} | ` +\n                `${largeWith.memory.peakHeapUsed.toString().padStart(10)}`\n            );\n            \n            const timeSaved = parseFloat(largeWithout.performance.durationSeconds) - parseFloat(largeWith.performance.durationSeconds);\n            const percentFaster = (timeSaved / parseFloat(largeWithout.performance.durationSeconds) * 100).toFixed(1);\n            \n            console.log(`\\n⚡ Large Dataset Benefits: ${timeSaved.toFixed(1)}s faster (${percentFaster}% improvement)`);\n        }\n    }\n    \n    // Recommendations\n    console.log('\\n💡 RECOMMENDATIONS:');\n    console.log('   ✅ ALWAYS enable connection pooling in production');\n    console.log('   ✅ Connection pooling benefits increase with higher concurrency');\n    console.log('   ✅ Especially important for large datasets and high-frequency requests');\n    console.log('   ✅ Reduces server load by reusing TCP connections');\n    console.log('   ✅ Significantly improves latency and throughput');\n    \n    console.log('\\n🔧 CONFIGURATION TIPS:');\n    console.log('   • enableConnectionPooling: true (default)');\n    console.log('   • keepAlive: true (default)');\n    console.log('   • Adjust maxSockets based on concurrency needs');\n    console.log('   • Consider server-side connection limits');\n    console.log('   • Monitor connection reuse in production');\n}\n\n/**\n * Save benchmark results to file\n */\nasync function saveResults(testType, results) {\n    const resultsDir = './benchmarks/results';\n    if (!fs.existsSync(resultsDir)) {\n        fs.mkdirSync(resultsDir, { recursive: true });\n    }\n    \n    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');\n    const filename = `${resultsDir}/${testType}-${timestamp}.json`;\n    \n    const report = {\n        testType,\n        timestamp: new Date().toISOString(),\n        nodeVersion: process.version,\n        platform: process.platform,\n        results\n    };\n    \n    fs.writeFileSync(filename, JSON.stringify(report, null, 2));\n    console.log(`\\n💾 Results saved to: ${filename}`);\n}\n\n// Run benchmark if called directly\nif (require.main === module) {\n    runConnectionPoolingBenchmark().catch(console.error);\n}\n\nmodule.exports = { runConnectionPoolingBenchmark };
+async function runConnectionPoolingBenchmark() {
+    console.log('🔌 ak-fetch Connection Pooling Benchmark\n');
+    const { getDatasetSize, logDatasetInfo } = await import('./dataset-helper.js');
+    logDatasetInfo();
+    console.log('Comparing performance with and without HTTP connection pooling...\n');
+    
+    const datasetSize = getDatasetSize();
+    const results = [];
+    
+    if (datasetSize === '100k' || datasetSize === 'both') {
+        // Test with 100k dataset
+        console.log('📊 Testing with 100k dataset:');
+        
+        const withoutPooling = await runConnectionPoolingTest(false, '100k');
+        results.push(withoutPooling);
+        
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        const withPooling = await runConnectionPoolingTest(true, '100k');
+        results.push(withPooling);
+    }
+    
+    if (datasetSize === '1m' || datasetSize === 'both') {
+        // Test with 1m dataset
+        if (datasetSize === 'both') {
+            console.log('\n📊 Testing with 1m dataset:');
+        } else {
+            console.log('📊 Testing with 1m dataset:');
+        }
+        
+        const withoutPooling1m = await runConnectionPoolingTest(false, '1m');
+        results.push(withoutPooling1m);
+        
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+        const withPooling1m = await runConnectionPoolingTest(true, '1m');
+        results.push(withPooling1m);
+    }
+    
+    // Save results
+    await saveResults('connection-pooling-benchmark', results);
+    
+    // Generate report
+    generateConnectionPoolingReport(results);
+}
+
+/**
+ * Generate connection pooling performance report
+ */
+function generateConnectionPoolingReport(results) {
+    console.log('\n🔌 CONNECTION POOLING PERFORMANCE REPORT');
+    console.log('═'.repeat(60));
+    
+    const validResults = results.filter(r => !r.failed && r.performance);
+    
+    if (validResults.length === 0) {
+        console.log('❌ No valid results to report');
+        return;
+    }
+    
+    console.log('\nPerformance Comparison:');
+    console.log('Dataset | Pooling  | Records/sec | Req/sec | Avg Req (ms) | Errors');
+    console.log('-'.repeat(70));
+    
+    validResults
+        .sort((a, b) => a.testSize.localeCompare(b.testSize))
+        .forEach(result => {
+            const p = result.performance;
+            console.log(
+                `${result.testSize.padEnd(7)} | ` +
+                `${(result.connectionPooling ? 'ENABLED' : 'DISABLED').padEnd(8)} | ` +
+                `${p.recordsPerSecond.toString().padStart(10)} | ` +
+                `${p.rps.toString().padStart(6)} | ` +
+                `${p.avgRequestDuration.padStart(11)} | ` +
+                `${p.errorRate}%`
+            );
+        });
+    
+    // Calculate improvements for each dataset size
+    ['100k', '1m'].forEach(size => {
+        const sizeResults = validResults.filter(r => r.testSize === size);
+        const withoutPooling = sizeResults.find(r => !r.connectionPooling);
+        const withPooling = sizeResults.find(r => r.connectionPooling);
+        
+        if (withoutPooling && withPooling) {
+            const speedImprovement = ((withPooling.performance.recordsPerSecond - withoutPooling.performance.recordsPerSecond) / withoutPooling.performance.recordsPerSecond * 100).toFixed(1);
+            const requestImprovement = ((withPooling.performance.rps - withoutPooling.performance.rps) / withoutPooling.performance.rps * 100).toFixed(1);
+            const latencyImprovement = ((parseFloat(withoutPooling.performance.avgRequestDuration) - parseFloat(withPooling.performance.avgRequestDuration)) / parseFloat(withoutPooling.performance.avgRequestDuration) * 100).toFixed(1);
+            
+            console.log(`\n📈 ${size.toUpperCase()} DATASET IMPROVEMENTS:`);
+            console.log(`   Throughput: +${speedImprovement}% faster record processing`);
+            console.log(`   Request Rate: +${requestImprovement}% more requests per second`);
+            console.log(`   Latency: ${latencyImprovement}% faster average request time`);
+        }
+    });
+    
+    // Best performers
+    const bestThroughput = validResults.reduce((best, current) =>
+        current.performance.recordsPerSecond > best.performance.recordsPerSecond ? current : best
+    );
+    
+    const bestLatency = validResults.reduce((best, current) =>
+        parseFloat(current.performance.avgRequestDuration) < parseFloat(best.performance.avgRequestDuration) ? current : best
+    );
+    
+    console.log('\n🏆 PERFORMANCE CHAMPIONS:');
+    console.log(`   Highest Throughput: ${bestThroughput.connectionPooling ? 'WITH' : 'WITHOUT'} pooling (${bestThroughput.performance.recordsPerSecond} records/sec)`);
+    console.log(`   Lowest Latency: ${bestLatency.connectionPooling ? 'WITH' : 'WITHOUT'} pooling (${bestLatency.performance.avgRequestDuration}ms avg)`);
+    
+    console.log('\n💡 CONNECTION POOLING RECOMMENDATIONS:');
+    console.log('   ✅ ALWAYS enable connection pooling in production');
+    console.log('   ✅ Connection pooling reduces latency and improves throughput');
+    console.log('   ✅ Benefits are more pronounced with higher request volumes');
+    console.log('   ✅ Reduces server load by reusing TCP connections');
+    
+    console.log('\n🔧 CONFIGURATION:');
+    console.log('   enableConnectionPooling: true (recommended)');
+    console.log('   keepAlive: true (recommended)');
+    console.log('   Monitor connection reuse in production logs');
+}
+
+/**
+ * Save benchmark results to file
+ */
+async function saveResults(testType, results) {
+    const resultsDir = './benchmarks/results';
+    if (!fs.existsSync(resultsDir)) {
+        fs.mkdirSync(resultsDir, { recursive: true });
+    }
+    
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `${resultsDir}/${testType}-${timestamp}.json`;
+    
+    const report = {
+        testType,
+        timestamp: new Date().toISOString(),
+        nodeVersion: process.version,
+        platform: process.platform,
+        results
+    };
+    
+    fs.writeFileSync(filename, JSON.stringify(report, null, 2));
+    console.log(`\n💾 Results saved to: ${filename}`);
+}
+
+// Run benchmark if called directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+    // Default to 100k dataset when run directly
+    process.env.DATASET_SIZE = process.env.DATASET_SIZE || '100k';
+    runConnectionPoolingBenchmark().catch(console.error);
+}
+
+export { runConnectionPoolingBenchmark };

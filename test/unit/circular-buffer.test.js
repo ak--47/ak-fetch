@@ -1,8 +1,9 @@
+// @ts-nocheck
 /**
  * Unit tests for CircularBuffer
  */
 
-const CircularBuffer = require('../../lib/circular-buffer');
+import CircularBuffer from '../../lib/circular-buffer.js';
 
 describe('CircularBuffer', () => {
     let buffer;

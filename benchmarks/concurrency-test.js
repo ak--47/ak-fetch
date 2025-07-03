@@ -1,24 +1,32 @@
+//@ts-nocheck
 /**
  * Concurrency Benchmark Test
  * 
- * Tests ak-fetch performance across different concurrency levels
- * to find optimal concurrent request settings for various scenarios.
+ * Tests ak-fetch performance against Mixpanel API across different concurrency levels
+ * to find optimal concurrent request settings for real-world analytics workloads.
  */
 
-const akFetch = require('../index.js');
-const { performance } = require('perf_hooks');
-const fs = require('fs');
-const { progress } = require('ak-tools');
-const { Headers } = require('undici');
+import akFetch from '../index.js';
+import { performance } from 'perf_hooks';
+import fs from 'fs';
+import { getDatasetSize, getDatasetFile, logDatasetInfo } from './dataset-helper.js';
+import dotenv from 'dotenv';
+dotenv.config();
 
-// Mock HTTP server endpoint for testing
+// Mixpanel Import API endpoint
 const TEST_URL = 'https://api.mixpanel.com/import';
+const MIXPANEL_AUTH = process.env.MIXPANEL_AUTH;
+
+if (!MIXPANEL_AUTH) {
+    console.error('❌ MIXPANEL_AUTH environment variable not set');
+    process.exit(1);
+}
 
 /**
  * Run benchmark with specific concurrency settings
  */
 async function runConcurrencyTest(concurrency, dataSize = '100k') {
-	const dataFile = `./testData/${dataSize}.ndjson`;
+	const dataFile = getDatasetFile(dataSize);
 	const testName = `concurrency-${concurrency}-${dataSize}`;
 
 	console.log(`\n🚀 Testing concurrency: ${concurrency} (${dataSize} dataset)`);
@@ -31,27 +39,20 @@ async function runConcurrencyTest(concurrency, dataSize = '100k') {
 			url: TEST_URL,
 			data: dataFile,
 			concurrency: concurrency,
-			batchSize: 2000,
+			batchSize: 2000, // Optimal Mixpanel batch size
 			verbose: true,
 			searchParams: {
-				strict: 1
+				strict: 1 // Enable strict validation
 			},
-			// progress: true,
             retries: 3,
-			timeout: 30000,
-			transform: (chunk) => {
-				return chunk; // No transformation needed for this test
-			},
+			timeout: 60000, // Increased timeout for high concurrency
 			enableConnectionPooling: true,
 			storeResponses: false, // Don't store responses to save memory
 			maxResponseBuffer: 10,   // Minimal response buffer
 			headers: {
-				"Authorization": "Basic " + Buffer.from("612a8128b3e2e7c0c41e57d1715f49e7:").toString("base64")
-			},
-			storeResponses: true,
-			// responseHandler: function (response) {
-				
-			// }
+				'Authorization': MIXPANEL_AUTH,
+				'Content-Type': 'application/json'
+			}
 		});
 
 		const endTime = performance.now();
@@ -103,28 +104,53 @@ async function runConcurrencyTest(concurrency, dataSize = '100k') {
  */
 async function runConcurrencyBenchmark() {
 	console.log('🔥 ak-fetch Concurrency Benchmark\n');
+	logDatasetInfo();
 	console.log('Testing different concurrency levels to find optimal settings...\n');
 
-	const concurrencyLevels = [50];
+	const concurrencyLevels = [
+		5,   // Low concurrency - conservative approach
+		10,  // Medium concurrency - balanced
+		15,  // High concurrency - good for most cases
+		25,  // Very high concurrency - maximum throughput
+		40   // Extreme concurrency - test API limits
+	];
+	
+	const datasetSize = getDatasetSize();
 	const results = [];
 
-	// Test with 100k dataset
-	console.log('📊 Testing with 100k dataset:');
-	for (const concurrency of concurrencyLevels) {
-		const result = await runConcurrencyTest(concurrency, '100k');
-		results.push(result);
+	if (datasetSize === '100k' || datasetSize === 'both') {
+		// Test with 100k dataset
+		console.log('📊 Testing with 100k dataset:');
+		for (const concurrency of concurrencyLevels) {
+			const result = await runConcurrencyTest(concurrency, '100k');
+			results.push(result);
 
-		// Brief pause between tests to stabilize system
-		await new Promise(resolve => setTimeout(resolve, 2000));
+			// Brief pause between tests to stabilize system
+			await new Promise(resolve => setTimeout(resolve, 2000));
+		}
 	}
 
-	// Test optimal concurrency with 1m dataset
-	console.log('\n📊 Testing optimal concurrency with 1m dataset:');
-	const optimalConcurrency = findOptimalConcurrency(results);
-	console.log(`\nOptimal concurrency level: ${optimalConcurrency}`);
+	if (datasetSize === '1m' || datasetSize === 'both') {
+		// Test optimal concurrency with 1m dataset
+		if (datasetSize === 'both') {
+			console.log('\n📊 Testing optimal concurrency with 1m dataset:');
+			const optimalConcurrency = findOptimalConcurrency(results);
+			console.log(`\nOptimal concurrency level: ${optimalConcurrency}`);
 
-	const largeResult = await runConcurrencyTest(optimalConcurrency, '1m');
-	results.push(largeResult);
+			const largeResult = await runConcurrencyTest(optimalConcurrency, '1m');
+			results.push(largeResult);
+		} else {
+			// If only testing 1m, test all concurrency levels
+			console.log('📊 Testing with 1m dataset:');
+			for (const concurrency of concurrencyLevels) {
+				const result = await runConcurrencyTest(concurrency, '1m');
+				results.push(result);
+
+				// Brief pause between tests to stabilize system
+				await new Promise(resolve => setTimeout(resolve, 2000));
+			}
+		}
+	}
 
 	// Save results
 	await saveResults('concurrency-benchmark', results);
@@ -194,9 +220,16 @@ function generateConcurrencyReport(results) {
 			current.memory.peakHeapUsed < best.memory.peakHeapUsed ? current : best
 		);
 
-	console.log('\n🏆 RECOMMENDATIONS:');
+	console.log('\n🏆 MIXPANEL API RECOMMENDATIONS:');
 	console.log(`   Highest Throughput: Concurrency ${bestThroughput.concurrency} (${bestThroughput.performance.recordsPerSecond} records/sec)`);
 	console.log(`   Most Memory Efficient: Concurrency ${bestMemory.concurrency} (${bestMemory.memory.peakHeapUsed}MB peak)`);
+
+	console.log('\n💡 CONCURRENCY GUIDELINES:');
+	console.log('   • Low concurrency (5-10): Use for real-time streaming or strict rate limits');
+	console.log('   • Medium concurrency (10-20): Best balance for most production workloads');
+	console.log('   • High concurrency (25+): Maximum throughput for bulk imports');
+	console.log('   • Monitor error rates - Mixpanel may throttle high concurrent requests');
+	console.log('   • Consider account tier limits: free accounts have stricter rate limits');
 
 	// Large dataset result
 	const largeResult = validResults.find(r => r.dataSize === '1m');
@@ -234,8 +267,10 @@ async function saveResults(testType, results) {
 }
 
 // Run benchmark if called directly
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
+	// Default to 100k dataset when run directly
+	process.env.DATASET_SIZE = process.env.DATASET_SIZE || '100k';
 	runConcurrencyBenchmark().catch(console.error);
 }
 
-module.exports = { runConcurrencyBenchmark };
+export { runConcurrencyBenchmark };

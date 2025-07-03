@@ -5,7 +5,7 @@
  * and curl command generation mode.
  */
 
-const akFetch = require('../../index');
+import akFetch from '../../index.js';
 
 describe('Dry Run Modes', () => {
     const mockUrl = 'https://httpbin.org/post';
@@ -243,8 +243,9 @@ describe('Dry Run Modes', () => {
                 verbose: false
             });
 
-            expect(result.responses).toHaveLength(0);
+            expect(result.responses).toHaveLength(2);
             expect(result.rowCount).toBe(2);
+			expect(result.responses.filter(r => r.transformed).length).toBe(2);
         });
 
         test('should handle dry run with multiple configurations', async () => {

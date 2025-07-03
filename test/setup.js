@@ -1,6 +1,7 @@
 /**
- * Jest test setup
+ * Vitest test setup
  */
+import { vi } from 'vitest';
 
 // Set test environment variables
 process.env.NODE_ENV = 'test';
@@ -12,9 +13,9 @@ const originalConsoleError = console.error;
 
 beforeEach(() => {
     // Mock console methods to reduce noise during tests
-    console.log = jest.fn();
-    console.warn = jest.fn();
-    console.error = jest.fn();
+    console.log = vi.fn();
+    console.warn = vi.fn();
+    console.error = vi.fn();
 });
 
 afterEach(() => {
@@ -24,7 +25,7 @@ afterEach(() => {
     console.error = originalConsoleError;
     
     // Clear all mocks
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 });
 
 // Global test utilities
@@ -72,13 +73,13 @@ global.testUtils = {
 };
 
 // Increase timeout for integration tests
-if (process.env.JEST_INTEGRATION_TESTS) {
-    jest.setTimeout(30000);
+if (process.env.VITEST_INTEGRATION_TESTS) {
+    // Timeout is handled in vitest.config.js
 }
 
 // Mock global fetch if not available
 if (!global.fetch) {
-    global.fetch = jest.fn();
+    global.fetch = vi.fn();
 }
 
 // Add custom matchers

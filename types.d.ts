@@ -157,7 +157,14 @@ export interface BatchRequestConfig {
   highWaterMark?: number;
 
   /**
-   * Function to modify each data item before sending
+   * Apply vendor-specific data transformation preset (runs before user transform)
+   * @example "mixpanel"
+   * @example "amplitude"
+   */
+  preset?: string;
+
+  /**
+   * Function to modify each data item before sending (runs after preset transform)
    */
   transform?: (item: any) => any;
 
@@ -251,6 +258,18 @@ export interface BatchRequestConfig {
    * Maximum file size for uploads in bytes
    */
   maxFileSize?: number;
+
+  /**
+   * Show transformed data in console during dry-run mode
+   * @default false
+   */
+  showData?: boolean;
+
+  /**
+   * Show first 3 transformed records in console during dry-run mode
+   * @default false
+   */
+  showSample?: boolean;
 }
 
 /**
@@ -311,3 +330,35 @@ export interface Result {
   /** Number of configurations processed (only in multi-config mode) */
   configCount?: number;
 }
+
+/**
+ * Main ak-fetch function that processes HTTP requests with batching, retry logic, and streaming
+ * 
+ * @param config - Single configuration object or array of configurations
+ * @returns Promise resolving to results (single Result or Result[] depending on input)
+ * 
+ * @example
+ * ```typescript
+ * import akFetch from 'ak-fetch';
+ * 
+ * // Single configuration
+ * const result = await akFetch({
+ *   url: 'https://api.example.com/users',
+ *   data: [{ name: 'John' }, { name: 'Jane' }],
+ *   method: 'POST'
+ * });
+ * 
+ * // Multiple configurations
+ * const results = await akFetch([
+ *   { url: 'https://api1.com/data', data: [{}] },
+ *   { url: 'https://api2.com/data', data: [{}] }
+ * ]);
+ * ```
+ */
+declare function akFetch(config: BatchRequestConfig): Promise<Result>;
+declare function akFetch(config: BatchRequestConfig[]): Promise<Result[]>;
+
+export default akFetch;
+
+// Named exports for convenience
+export { BatchRequestConfig, Result, HttpResponse };

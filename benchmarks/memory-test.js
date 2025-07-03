@@ -1,16 +1,25 @@
+//@ts-nocheck
 /**
  * Memory Efficiency Benchmark
  * 
- * Tests memory usage patterns and efficiency across different
- * configurations to optimize for large dataset processing.
+ * Tests memory usage patterns against Mixpanel API across different
+ * configurations to optimize for large analytics dataset processing.
  */
 
-const akFetch = require('../index.js');
-const { performance } = require('perf_hooks');
-const fs = require('fs');
+import akFetch from '../index.js';
+import { performance } from 'perf_hooks';
+import fs from 'fs';
+import dotenv from 'dotenv';
+dotenv.config();
 
-// Mock HTTP server endpoint for testing
-const TEST_URL = 'https://httpbin.org/post';
+// Mixpanel Import API endpoint
+const TEST_URL = 'https://api.mixpanel.com/import';
+const MIXPANEL_AUTH = process.env.MIXPANEL_AUTH;
+
+if (!MIXPANEL_AUTH) {
+    console.error('❌ MIXPANEL_AUTH environment variable not set');
+    process.exit(1);
+}
 
 /**
  * Monitor memory usage during test execution
@@ -81,7 +90,16 @@ async function runMemoryTest(config, testName) {
             url: TEST_URL,
             data: config.dataFile,
             ...config.options,
-            verbose: false
+            verbose: false,
+            headers: {
+                'Authorization': MIXPANEL_AUTH,
+                'Content-Type': 'application/json'
+            },
+            searchParams: {
+                strict: 1
+            },
+            timeout: 60000,
+            retries: 3
         });
         
         monitor.stop();
@@ -132,12 +150,17 @@ async function runMemoryTest(config, testName) {
  */
 async function runMemoryBenchmark() {
     console.log('💾 ak-fetch Memory Efficiency Benchmark\n');
+    const { getDatasetSize, getDatasetFile, logDatasetInfo } = await import('./dataset-helper.js');
+    logDatasetInfo();
     console.log('Testing memory usage patterns across different configurations...\n');
+    
+    const datasetSize = getDatasetSize();
+    const dataFile = getDatasetFile(datasetSize);
     
     const testConfigs = [
         {
-            name: 'Default Config',
-            dataFile: './testData/100k.ndjson',
+            name: `Default Config (${datasetSize})`,
+            dataFile,
             options: {
                 batchSize: 100,
                 concurrency: 10,
@@ -146,8 +169,8 @@ async function runMemoryBenchmark() {
             }
         },
         {
-            name: 'Memory Optimized',
-            dataFile: './testData/100k.ndjson',
+            name: `Memory Optimized (${datasetSize})`,
+            dataFile,
             options: {
                 batchSize: 1000,
                 concurrency: 5,
@@ -157,8 +180,8 @@ async function runMemoryBenchmark() {
             }
         },
         {
-            name: 'High Performance',
-            dataFile: './testData/100k.ndjson',
+            name: `High Performance (${datasetSize})`,
+            dataFile,
             options: {
                 batchSize: 500,
                 concurrency: 20,
@@ -168,8 +191,8 @@ async function runMemoryBenchmark() {
             }
         },
         {
-            name: 'Minimal Memory',
-            dataFile: './testData/100k.ndjson',
+            name: `Minimal Memory (${datasetSize})`,
+            dataFile,
             options: {
                 batchSize: 2000,
                 concurrency: 3,
@@ -180,20 +203,8 @@ async function runMemoryBenchmark() {
             }
         },
         {
-            name: 'Large Dataset - Memory Optimized',
-            dataFile: './testData/1m.ndjson',
-            options: {
-                batchSize: 2000,
-                concurrency: 10,
-                storeResponses: false,
-                maxResponseBuffer: 5,
-                forceGC: true,
-                maxMemoryUsage: 256 * 1024 * 1024 // 256MB limit
-            }
-        },
-        {
-            name: 'Streaming Mode',
-            dataFile: './testData/100k.ndjson',
+            name: `Streaming Mode (${datasetSize})`,
+            dataFile,
             options: {
                 batchSize: 100,
                 concurrency: 15,
@@ -258,40 +269,26 @@ function generateMemoryReport(results) {
     });
     
     // Memory efficiency analysis
-    const smallDatasetResults = validResults.filter(r => r.config.dataFile.includes('100k'));
-    const largeDatasetResults = validResults.filter(r => r.config.dataFile.includes('1m'));
+    const datasetResults = validResults; // All results use the same dataset size now
     
     console.log('\\n📊 MEMORY ANALYSIS:');
     
-    if (smallDatasetResults.length > 0) {
-        const bestMemory = smallDatasetResults.reduce((best, current) => 
+    if (datasetResults.length > 0) {
+        const bestMemory = datasetResults.reduce((best, current) => 
             current.memory.peakHeapUsed < best.memory.peakHeapUsed ? current : best
         );
         
-        const bestEfficiency = smallDatasetResults.reduce((best, current) => 
+        const bestEfficiency = datasetResults.reduce((best, current) => 
             parseFloat(current.memory.memoryPerRecord) < parseFloat(best.memory.memoryPerRecord) ? current : best
         );
         
-        const bestGrowth = smallDatasetResults.reduce((best, current) => 
+        const bestGrowth = datasetResults.reduce((best, current) => 
             current.memory.memoryGrowth < best.memory.memoryGrowth ? current : best
         );
         
         console.log(`   Lowest Peak Memory: ${bestMemory.testName} (${bestMemory.memory.peakHeapUsed.toFixed(1)}MB)`);
         console.log(`   Most Efficient: ${bestEfficiency.testName} (${bestEfficiency.memory.memoryPerRecord}KB/record)`);
         console.log(`   Least Growth: ${bestGrowth.testName} (${bestGrowth.memory.memoryGrowth.toFixed(1)}MB growth)`);
-    }
-    
-    if (largeDatasetResults.length > 0) {
-        console.log('\\n📈 Large Dataset Results:');
-        largeDatasetResults.forEach(result => {
-            const m = result.memory;
-            const p = result.performance;
-            console.log(`   ${result.testName}:`);
-            console.log(`     Peak Memory: ${m.peakHeapUsed.toFixed(1)}MB`);
-            console.log(`     Memory/Record: ${m.memoryPerRecord}KB`);
-            console.log(`     Throughput: ${p.recordsPerSecond} records/sec`);
-            console.log(`     Duration: ${p.durationSeconds}s`);
-        });
     }
     
     // Memory optimization recommendations
@@ -346,7 +343,10 @@ async function saveResults(testType, results) {
 }
 
 // Run benchmark if called directly
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
+    // Default to 100k dataset when run directly
+    process.env.DATASET_SIZE = process.env.DATASET_SIZE || '100k';
+    
     // Enable garbage collection if available
     if (typeof global.gc === 'undefined') {
         console.log('💡 Tip: Run with --expose-gc flag for more accurate memory measurements');
@@ -355,4 +355,4 @@ if (require.main === module) {
     runMemoryBenchmark().catch(console.error);
 }
 
-module.exports = { runMemoryBenchmark };
+export { runMemoryBenchmark };

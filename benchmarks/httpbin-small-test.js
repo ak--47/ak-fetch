@@ -5,7 +5,7 @@
  * Tests various configurations with smaller datasets to verify correctness
  */
 
-const akFetch = require('../index.js');
+import akFetch from '../index.js';
 
 async function runSmallBenchmark() {
     console.log('🧪 Running HTTPBin Small-Scale Benchmark');
@@ -124,8 +124,8 @@ async function runSmallBenchmark() {
 }
 
 // Run if called directly
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
     runSmallBenchmark().catch(console.error);
 }
 
-module.exports = runSmallBenchmark;
+export default runSmallBenchmark;

@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 
-const yargs = require('yargs');
-const { version } = /** @type {{ version: string }} */ (require('./package.json'));
-const u = require('ak-tools');
-const { createLogger } = require('./lib/logger');
+import yargs from 'yargs';
+import { readFileSync } from 'fs';
+import u from 'ak-tools';
+import { createLogger } from './lib/logger.js';
+
+// Read package.json for version
+const packageJson = JSON.parse(readFileSync('./package.json', 'utf8'));
+const { version } = packageJson;
 
 async function cliParams() {
 	// @ts-ignore
@@ -49,7 +53,7 @@ DOCS: https://github.com/ak--47/ak-fetch`)
 			demandOption: false,
 			describe: 'Records per HTTP request (0 disables batching)',
 			type: 'number',
-			default: 1
+			default: 2
 		})
 		.option("concurrency", {
 			demandOption: false,
@@ -107,8 +111,28 @@ DOCS: https://github.com/ak--47/ak-fetch`)
 			alias: 'dryRun',
 			demandOption: false,
 			default: false,
-			describe: 'Test mode: true or "curl" for curl commands',
-			type: 'string'
+			describe: 'Test mode: simulate requests without making them',
+			type: 'boolean'
+		})
+		.option("curl", {
+			demandOption: false,
+			default: false,
+			describe: 'Generate curl commands instead of making requests',
+			type: 'boolean'
+		})
+		.option("show_data", {
+			alias: 'showData',
+			demandOption: false,
+			default: false,
+			describe: 'Show first 100 transformed records in dry-run mode (useful with --preset)',
+			type: 'boolean'
+		})
+		.option("show_sample", {
+			alias: 'showSample',
+			demandOption: false,
+			default: false,
+			describe: 'Show first 3 transformed records in dry-run mode',
+			type: 'boolean'
 		})
 		.option("no_batch", {
 			alias: 'noBatch',
@@ -125,9 +149,8 @@ DOCS: https://github.com/ak--47/ak-fetch`)
 		})
 		.option("format", {
 			demandOption: false,
-			describe: 'Output format for log files',
+			describe: 'Output format for log files (auto-detected from file extension if not specified)',
 			type: 'string',
-			default: 'json',
 			choices: ['json', 'csv', 'ndjson']
 		})
 		.option("verbose", {
@@ -258,6 +281,12 @@ DOCS: https://github.com/ak--47/ak-fetch`)
 			type: 'string',
 			default: 'Bearer'
 		})
+		.option("preset", {
+			demandOption: false,
+			describe: 'Apply vendor-specific data transformation preset',
+			type: 'string',
+			choices: ['mixpanel', 'amplitude', 'pendo']
+		})
 		.help()
 		.wrap(null)
 		.argv;
@@ -275,7 +304,9 @@ DOCS: https://github.com/ak--47/ak-fetch`)
 
 	// Parse JSON arguments
 	// @ts-ignore
-	if (args.headers) args.headers = parse(args.headers);
+	if (args.headers) {
+		args.headers = parse(args.headers);
+	}
 	// @ts-ignore
 	if (args.search_params) args.searchParams = parse(args.search_params);
 	// @ts-ignore
@@ -287,11 +318,11 @@ DOCS: https://github.com/ak--47/ak-fetch`)
 
 	// Handle dry run modes
 	// @ts-ignore
-	if (args.dry_run === 'true' || args.dry_run === true) args.dryRun = true;
+	if (args.curl) args.dryRun = 'curl';
 	// @ts-ignore
-	else if (args.dry_run === 'curl') args.dryRun = 'curl';
+	else if (args.dry_run) args.dryRun = true;
 	// @ts-ignore
-	else if (args.dry_run === 'false' || args.dry_run === false) args.dryRun = false;
+	else args.dryRun = false;
 
 	// Handle shell command configuration
 	// @ts-ignore
@@ -310,6 +341,23 @@ DOCS: https://github.com/ak--47/ak-fetch`)
 	// Handle retries null value for fire-and-forget
 	// @ts-ignore
 	if (args.retries === 'null' || args.retries === null) args.retries = null;
+
+	// Auto-detect format from log file extension if not explicitly specified
+	// @ts-ignore
+	if (args.log_file && !args.format) {
+		// @ts-ignore
+		const ext = args.log_file.toLowerCase().split('.').pop();
+		if (ext === 'ndjson' || ext === 'jsonl') {
+			// @ts-ignore
+			args.format = 'ndjson';
+		} else if (ext === 'csv') {
+			// @ts-ignore
+			args.format = 'csv';
+		} else {
+			// @ts-ignore
+			args.format = 'json';
+		}
+	}
 
 	// Handle file input
 	// @ts-ignore
@@ -397,10 +445,10 @@ function parse(val, defaultVal = undefined) {
 
 
 // Execute CLI when run directly
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
 	(async () => {
 		try {
-			const akFetch = require('./index.js');
+			const { default: akFetch } = await import('./index.js');
 			const config = await cliParams();
 			const result = await akFetch(config);
 			if (result && typeof result === 'object') {
@@ -413,4 +461,4 @@ if (require.main === module) {
 	})();
 }
 
-module.exports = cliParams;
+export default cliParams;

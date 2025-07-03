@@ -35,12 +35,76 @@ Or use with npx:
 npx ak-fetch --help
 ```
 
+## 📦 Module Compatibility
+
+ak-fetch is built as an **ESM (ECMAScript Module)** and supports modern Node.js environments (v16+).
+
+### ESM Import (Recommended)
+
+```javascript
+import akFetch from 'ak-fetch';
+// or with named imports
+import akFetch, { BatchRequestConfig, Result } from 'ak-fetch';
+```
+
+### TypeScript Support
+
+Full TypeScript definitions are included with IntelliSense support in VS Code and other IDEs:
+
+```typescript
+import akFetch, { BatchRequestConfig, Result } from 'ak-fetch';
+
+const config: BatchRequestConfig = {
+  url: 'https://api.example.com/data',
+  data: [{ id: 1, name: 'John' }],
+  batchSize: 100
+};
+
+const result: Result = await akFetch(config);
+```
+
+### CommonJS Compatibility
+
+For legacy CommonJS projects, you can use dynamic imports:
+
+```javascript
+// CommonJS dynamic import
+const akFetch = (await import('ak-fetch')).default;
+
+const result = await akFetch({
+  url: 'https://api.example.com/data',
+  data: [{ id: 1, name: 'John' }]
+});
+```
+
+Or use the pre-built CommonJS version:
+
+```javascript
+// Use pre-built CommonJS version (shipped with the package)
+const akFetch = require('ak-fetch/dist/index.cjs');
+
+const result = await akFetch({
+  url: 'https://api.example.com/data',
+  data: [{ id: 1, name: 'John' }]
+});
+```
+
+Or transpile yourself using esbuild:
+
+```bash
+# Install esbuild
+npm install -D esbuild
+
+# Transpile to CommonJS
+npx esbuild node_modules/ak-fetch/index.js --bundle --platform=node --format=cjs --outfile=ak-fetch-cjs.js
+```
+
 ## 🖥️ Quick Start
 
 ### Basic Usage
 
 ```javascript
-const akFetch = require('ak-fetch');
+import akFetch from 'ak-fetch';
 
 const result = await akFetch({
     url: 'https://api.example.com/bulk',
@@ -60,6 +124,8 @@ console.log(`Processed ${result.rowCount} records in ${result.clockTime}`);
 ### Streaming Large Files
 
 ```javascript
+import akFetch from 'ak-fetch';
+
 const result = await akFetch({
     url: 'https://api.example.com/events',
     data: './million-records.jsonl',
@@ -73,6 +139,8 @@ const result = await akFetch({
 ### Multiple Endpoints
 
 ```javascript
+import akFetch from 'ak-fetch';
+
 const results = await akFetch([
     {
         url: 'https://api1.example.com/users',
@@ -160,6 +228,7 @@ npx ak-fetch ./events.jsonl \
 | `searchParams` | `Object` | `undefined` | URL query parameters |
 | `bodyParams` | `Object` | `undefined` | Additional body parameters |
 | `delay` | `number` | `0` | Delay between requests in milliseconds |
+| `preset` | `string` | `undefined` | Vendor preset (mixpanel, amplitude, pendo) |
 | `transform` | `Function` | `undefined` | Transform function for each record |
 | `clone` | `boolean` | `false` | Clone data before transformation |
 
@@ -243,6 +312,59 @@ const result = await akFetch({
 
 // result.responses will be empty array []
 // Only metadata (reqCount, duration, etc.) is returned
+```
+
+### Vendor Presets for Easy API Integration
+
+ak-fetch includes built-in presets that automatically format your data for popular APIs:
+
+```javascript
+// Mixpanel preset - automatically formats events for Mixpanel's API
+const result = await akFetch({
+    url: 'https://api.mixpanel.com/import',
+    data: [
+        {
+            event: 'page_view',
+            user_id: 12345,
+            timestamp: '2024-01-01T00:00:00Z',
+            page_url: '/home'
+        }
+    ],
+    preset: 'mixpanel', // Transforms data to Mixpanel format
+    headers: { 'Authorization': 'Bearer your-token' }
+});
+
+// The preset automatically:
+// - Creates properties object structure
+// - Converts user_id → $user_id  
+// - Converts timestamps to Unix epoch
+// - Generates $insert_id for deduplication
+// - Promotes special properties (email → $email, etc.)
+// - Truncates strings to 255 characters
+```
+
+**Available Presets:**
+- `mixpanel` - Formats data for Mixpanel's event tracking API
+- `amplitude` - *(Coming soon)* 
+- `pendo` - *(Coming soon)*
+
+**CLI Usage:**
+```bash
+npx ak-fetch ./events.json --url https://api.mixpanel.com/import --preset mixpanel
+```
+
+**Preset + Custom Transform:**
+```javascript
+// Presets run BEFORE your custom transform
+const result = await akFetch({
+    url: 'https://api.mixpanel.com/import',
+    data: rawEvents,
+    preset: 'mixpanel',           // Runs first
+    transform: (record) => {      // Runs second
+        record.properties.custom_field = 'added_value';
+        return record;
+    }
+});
 ```
 
 ### Custom Error Handling and Transformation

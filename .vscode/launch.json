@@ -8,7 +8,15 @@
 			"program": "${file}",
 			"restart": true,
 			"console": "integratedTerminal",
-			"internalConsoleOptions": "neverOpen"
+			"internalConsoleOptions": "neverOpen",
+			"runtimeArgs": [
+				"--ignore",
+				"./benchmarks",
+				"--ignore",
+				"./logs",
+				"--ignore",
+				"./testData"
+			]
 		}
 	]
 }

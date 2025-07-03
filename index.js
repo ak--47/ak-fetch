@@ -6,28 +6,30 @@
  * 2025 production-ready version with advanced features
  */
 
-const RunQueue = require("run-queue");
-const { json, isJSONStr, comma, makeExist } = require("ak-tools");
-const cli = require('./cli');
-const { execSync } = require('child_process');
-const { Readable } = require('stream');
-const path = require('path');
-const { createReadStream, existsSync } = require('fs');
-require('dotenv').config({ debug: false, override: false });
+import RunQueue from "run-queue";
+import { json, isJSONStr, comma, makeExist } from "ak-tools";
+import cli from './cli.js';
+import { execSync } from 'child_process';
+import { Readable } from 'stream';
+import path from 'path';
+import { createReadStream, existsSync } from 'fs';
+import { config as dotenvConfig } from 'dotenv';
+dotenvConfig({ debug: false, override: false });
 
 // Import new modular components
-const HttpClient = require('./lib/http-client');
-const CircularBuffer = require('./lib/circular-buffer');
-const StreamProcessors = require('./lib/stream-processors');
-const { createLogger } = require('./lib/logger');
-const { 
+import HttpClient from './lib/http-client.js';
+import CircularBuffer from './lib/circular-buffer.js';
+import StreamProcessors from './lib/stream-processors.js';
+import { createLogger } from './lib/logger.js';
+import { getPresetTransform, applyPresetTransform } from './lib/presets.js';
+import { 
     AkFetchError, 
     NetworkError, 
     TimeoutError, 
     ValidationError,
     ConfigurationError,
     MemoryError 
-} = require('./lib/errors');
+} from './lib/errors.js';
 
 
 /** @typedef {import("./types").BatchRequestConfig} BatchRequestConfig */
@@ -442,7 +444,6 @@ async function processSingleConfig(config, isMainJob = true) {
     // Write log file if specified
     if (processedConfig.logFile && isMainJob) {
         logger.fileOperation('Writing', processedConfig.logFile, processedConfig.format);
-		if (!processedConfig.format) processedConfig.format = /** @type {"json"} */ ('json');
 		if (processedConfig.verbose === undefined) processedConfig.verbose = false;
         await writeLogFile(
             processedConfig.logFile, 
@@ -917,14 +918,12 @@ async function processDataStream(stream, config, logger) {
 
     stream.on('error', error => {
         logger.error('Stream error:', error.message);
-        cleanup();
     });
 
     stream.on('end', () => {
         if (logger.isVerbose()) {
             logger.info(`Stream ended: processed ${comma(rowCount)} records, ${comma(reqCount)} requests`);
         }
-        cleanup();
     });
 
     // Process stream data
@@ -932,15 +931,30 @@ async function processDataStream(stream, config, logger) {
         if (data !== null) {  // Skip null data for GET requests
             let processedData = data;
             
-            // Apply transform function if provided
+            // Clone data if requested to avoid mutations (do this before any transforms)
+            if (config.clone) {
+                processedData = typeof data === 'object' && data !== null ? 
+                    JSON.parse(JSON.stringify(data)) : data;
+            }
+            
+            // Apply preset transform first (if specified)
+            if (config.preset) {
+                try {
+                    processedData = applyPresetTransform(processedData, config.preset, config.errorHandler);
+                } catch (error) {
+                    // @ts-ignore
+                    logger.error(`Preset transform error (${config.preset}): ${error.message}`);
+                    if (config.errorHandler && typeof config.errorHandler === 'function') {
+                        config.errorHandler(error, processedData);
+                    } else {
+                        throw error; // Preset transform errors should fail the operation
+                    }
+                }
+            }
+            
+            // Apply user transform function (if provided) - runs AFTER preset transform
             if (typeof config.transform === 'function') {
                 try {
-                    // Clone data if requested to avoid mutations
-                    if (config.clone) {
-                        processedData = typeof data === 'object' && data !== null ? 
-                            JSON.parse(JSON.stringify(data)) : data;
-                    }
-                    
                     const transformed = config.transform(processedData);
                     if (transformed !== undefined) {
                         processedData = transformed;
@@ -953,7 +967,11 @@ async function processDataStream(stream, config, logger) {
                 } catch (error) {
                     // @ts-ignore
                     logger.error(`Transform error: ${error.message}`);
-                    throw error; // Transform errors should fail the operation
+                    if (config.errorHandler && typeof config.errorHandler === 'function') {
+                        config.errorHandler(error, processedData);
+                    } else {
+                        throw error; // Transform errors should fail the operation
+                    }
                 }
             }
             
@@ -969,18 +987,14 @@ async function processDataStream(stream, config, logger) {
 
         // Pause stream if queue is full
         if (queue.queued >= maxTasks && !isStreamPaused) {
-            if (logger.isVerbose()) {
-                logger.info(`Pausing stream: queue size ${queue.queued}/${maxTasks}`);
-            }
+            // Suppressed: Pausing stream message to avoid jittery output
             stream.pause();
             isStreamPaused = true;
             
             await queue.run();
             queue = new RunQueue({ maxConcurrency: concurrency });
             
-            if (logger.isVerbose()) {
-                logger.info(`Resuming stream: ${comma(reqCount)} requests completed`);
-            }
+            // Suppressed: Resuming stream message to avoid jittery output
             stream.resume();
             isStreamPaused = false;
         }
@@ -992,7 +1006,9 @@ async function processDataStream(stream, config, logger) {
     }
 
     // Wait for all requests to complete
-    await queue.run();
+    if (queue.queued > 0) {
+        await queue.run();
+    }
     
     // Cleanup
     cleanup();
@@ -1049,8 +1065,21 @@ async function processDataStream(stream, config, logger) {
                 } else {
                     // Store error in response buffer if enabled
                     if (responseBuffer) {
+                        // Include full error details including response body
+                        const errorDetails = {
+                            error: error.message,
+                            batch: batchData
+                        };
+                        
+                        // Add optional error properties if they exist
+                        if (error.statusCode) errorDetails.statusCode = error.statusCode;
+                        if (error.body) errorDetails.body = error.body;
+                        if (error.url) errorDetails.url = error.url;
+                        if (error.method) errorDetails.method = error.method;
+                        if (error.timestamp) errorDetails.timestamp = error.timestamp;
+                        
                         // @ts-ignore
-                        responseBuffer.push({ error: error.message, batch: batchData });
+                        responseBuffer.push(errorDetails);
                     }
                 }
             }
@@ -1428,26 +1457,62 @@ async function handleDryRun(config, logger, isMainJob) {
     for await (const data of stream) {
         if (data !== null) {
             rowCount++;
+            let processedData = data;
             
-            // Apply transform for testing if provided
+            // Clone data if requested to avoid mutations (do this before any transforms)
+            if (config.clone) {
+                processedData = typeof data === 'object' && data !== null ? 
+                    JSON.parse(JSON.stringify(data)) : data;
+            }
+            
+            // Apply preset transform first (if specified)
+            if (config.preset) {
+                try {
+                    processedData = applyPresetTransform(processedData, config.preset, config.errorHandler);
+                } catch (error) {
+                    logger.error(`Preset transform error in dry run (${config.preset}): ${error.message}`);
+                    if (config.errorHandler && typeof config.errorHandler === 'function') {
+                        config.errorHandler(error, processedData);
+                    } else {
+                        throw error; // Preset transform errors should fail the operation
+                    }
+                }
+            }
+            
+            // Apply user transform for testing if provided (runs AFTER preset transform)
             if (typeof config.transform === 'function') {
                 try {
-                    let processedData = data;
-                    if (config.clone) {
-                        processedData = typeof data === 'object' && data !== null ? 
-                            JSON.parse(JSON.stringify(data)) : data;
-                    }
-                    
                     const transformed = config.transform(processedData);
-                    
-                    // When not cloning, the transform should mutate the original data (but only for objects, not arrays)
-                    // This ensures the dry run behaves the same as real execution
-                    if (!config.clone && transformed !== undefined && typeof data === 'object' && data !== null && !Array.isArray(data) && typeof transformed === 'object' && !Array.isArray(transformed)) {
-                        Object.assign(data, transformed);
+                    if (transformed !== undefined) {
+                        processedData = transformed;
+                        
+                        // When not cloning, also update the original data object (but only for objects, not arrays)
+                        if (!config.clone && typeof data === 'object' && data !== null && !Array.isArray(data) && typeof transformed === 'object' && !Array.isArray(transformed)) {
+                            Object.assign(data, transformed);
+                        }
                     }
                 } catch (error) {
                     logger.error(`Transform error in dry run: ${error.message}`);
-                    throw error; // Re-throw transform errors in dry run mode
+                    if (config.errorHandler && typeof config.errorHandler === 'function') {
+                        config.errorHandler(error, processedData);
+                    } else {
+                        throw error; // Transform errors should fail the operation
+                    }
+                }
+            }
+            
+            // Store transformed data in responses for inspection (only if transforms are used)
+            if (config.preset || config.transform) {
+                responses.push(processedData);
+                
+                // Print transformed data to console if showData or showSample is enabled
+                if ((config.showData || config.showSample) && logger.isVerbose()) {
+                    const maxRecords = config.showSample ? 3 : 100;
+                    if (responses.length <= maxRecords) {
+                        logger.info(`Transformed record ${responses.length}:`, JSON.stringify(processedData, null, 2));
+                    } else if (responses.length === maxRecords + 1) {
+                        logger.info(`... (showing only first ${maxRecords} transformed records)`);
+                    }
                 }
             }
         }
@@ -1525,7 +1590,7 @@ function prettyTime(milliseconds) {
 }
 
 // CLI execution
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
     cli()
         .then(params => {
             return main(params).then(results => ({ params, results }));
@@ -1553,4 +1618,4 @@ if (require.main === module) {
         });
 }
 
-module.exports = main;
+export default main;

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Shell Commands Integration Tests
  * 
@@ -5,7 +6,7 @@
  * including various shell command scenarios and error handling.
  */
 
-const akFetch = require('../../index');
+import akFetch from '../../index.js';
 
 describe('Shell Commands', () => {
     const mockUrl = 'https://httpbin.org/post';

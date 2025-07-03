@@ -1,8 +1,9 @@
+// @ts-nocheck
 /**
  * Unit tests for AkCookieJar
  */
 
-const AkCookieJar = require('../../lib/cookie-jar');
+import AkCookieJar from '../../lib/cookie-jar.js';
 
 describe('AkCookieJar', () => {
     let cookieJar;
