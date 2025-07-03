@@ -1590,7 +1590,7 @@ function prettyTime(milliseconds) {
 }
 
 // CLI execution
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
     cli()
         .then(params => {
             return main(params).then(results => ({ params, results }));

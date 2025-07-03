@@ -333,9 +333,32 @@ export interface Result {
 
 /**
  * Main ak-fetch function that processes HTTP requests with batching, retry logic, and streaming
+ * 
+ * @param config - Single configuration object or array of configurations
+ * @returns Promise resolving to results (single Result or Result[] depending on input)
+ * 
+ * @example
+ * ```typescript
+ * import akFetch from 'ak-fetch';
+ * 
+ * // Single configuration
+ * const result = await akFetch({
+ *   url: 'https://api.example.com/users',
+ *   data: [{ name: 'John' }, { name: 'Jane' }],
+ *   method: 'POST'
+ * });
+ * 
+ * // Multiple configurations
+ * const results = await akFetch([
+ *   { url: 'https://api1.com/data', data: [{}] },
+ *   { url: 'https://api2.com/data', data: [{}] }
+ * ]);
+ * ```
  */
-export default function akFetch(config: BatchRequestConfig): Promise<Result>;
-export default function akFetch(config: BatchRequestConfig[]): Promise<Result[]>;
+declare function akFetch(config: BatchRequestConfig): Promise<Result>;
+declare function akFetch(config: BatchRequestConfig[]): Promise<Result[]>;
+
+export default akFetch;
 
 // Named exports for convenience
 export { BatchRequestConfig, Result, HttpResponse };

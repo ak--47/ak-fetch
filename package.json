@@ -1,6 +1,6 @@
 {
 	"name": "ak-fetch",
-	"version": "2.0.0",
+	"version": "2.0.1",
 	"type": "module",
 	"description": "Production-ready HTTP client for bulk operations with connection pooling, exponential backoff, streaming, and comprehensive error handling",
 	"main": "index.js",
@@ -17,7 +17,8 @@
 		"types.d.ts",
 		"lib/",
 		"cli.js",
-		"README.md"
+		"README.md",
+		"dist/"
 	],
 	"scripts": {
 		"test": "vitest run",
@@ -27,8 +28,12 @@
 		"test:coverage": "vitest run --coverage && open ./coverage/index.html",
 		"test:ci": "vitest run --coverage",
 		"test:ui": "vitest --ui",
+		"build:cjs": "esbuild index.js --bundle --platform=node --format=cjs --outfile=dist/index.cjs --external:ak-tools --external:yargs --external:undici --external:run-queue --external:dotenv --external:form-data --external:tough-cookie --external:readline --external:querystring --external:murmurhash --external:json-stable-stringify --external:fetch-retry --external:dayjs",
+		"build:cjs-cli": "esbuild cli.js --bundle --platform=node --format=cjs --outfile=dist/cli.cjs --external:ak-tools --external:yargs --external:undici --external:run-queue --external:dotenv --external:form-data --external:tough-cookie --external:readline --external:querystring --external:murmurhash --external:json-stable-stringify --external:fetch-retry --external:dayjs",
+		"build": "npm run build:cjs && npm run build:cjs-cli",
+		"prepublishOnly": "npm run test:ci && npm run build",
 		"post": "npm publish",
-		"prune": "rm -rf logs/* && rm -rf coverage/* && rm -rf benchmarks/results/*",
+		"prune": "rm -rf logs/* && rm -rf coverage/* && rm -rf benchmarks/results/* && rm -rf dist/*",
 		"coverage": "npm run test:coverage",
 		"scratch": "nodemon scratch.mjs",
 		"bench:100k": "DATASET_SIZE=100k node benchmarks/run-all.js",
@@ -71,6 +76,7 @@
 		"@types/mocha": "^10.0.10",
 		"@vitest/coverage-v8": "^3.2.4",
 		"@vitest/ui": "^3.2.4",
+		"esbuild": "^0.24.2",
 		"nock": "^13.3.8",
 		"nodemon": "^3.1.0",
 		"supertest": "^6.3.4",

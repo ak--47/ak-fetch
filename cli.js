@@ -445,10 +445,10 @@ function parse(val, defaultVal = undefined) {
 
 
 // Execute CLI when run directly
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
 	(async () => {
 		try {
-			const akFetch = require('./index.js');
+			const { default: akFetch } = await import('./index.js');
 			const config = await cliParams();
 			const result = await akFetch(config);
 			if (result && typeof result === 'object') {

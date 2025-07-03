@@ -35,12 +35,76 @@ Or use with npx:
 npx ak-fetch --help
 ```
 
+## 📦 Module Compatibility
+
+ak-fetch is built as an **ESM (ECMAScript Module)** and supports modern Node.js environments (v16+).
+
+### ESM Import (Recommended)
+
+```javascript
+import akFetch from 'ak-fetch';
+// or with named imports
+import akFetch, { BatchRequestConfig, Result } from 'ak-fetch';
+```
+
+### TypeScript Support
+
+Full TypeScript definitions are included with IntelliSense support in VS Code and other IDEs:
+
+```typescript
+import akFetch, { BatchRequestConfig, Result } from 'ak-fetch';
+
+const config: BatchRequestConfig = {
+  url: 'https://api.example.com/data',
+  data: [{ id: 1, name: 'John' }],
+  batchSize: 100
+};
+
+const result: Result = await akFetch(config);
+```
+
+### CommonJS Compatibility
+
+For legacy CommonJS projects, you can use dynamic imports:
+
+```javascript
+// CommonJS dynamic import
+const akFetch = (await import('ak-fetch')).default;
+
+const result = await akFetch({
+  url: 'https://api.example.com/data',
+  data: [{ id: 1, name: 'John' }]
+});
+```
+
+Or use the pre-built CommonJS version:
+
+```javascript
+// Use pre-built CommonJS version (shipped with the package)
+const akFetch = require('ak-fetch/dist/index.cjs');
+
+const result = await akFetch({
+  url: 'https://api.example.com/data',
+  data: [{ id: 1, name: 'John' }]
+});
+```
+
+Or transpile yourself using esbuild:
+
+```bash
+# Install esbuild
+npm install -D esbuild
+
+# Transpile to CommonJS
+npx esbuild node_modules/ak-fetch/index.js --bundle --platform=node --format=cjs --outfile=ak-fetch-cjs.js
+```
+
 ## 🖥️ Quick Start
 
 ### Basic Usage
 
 ```javascript
-const akFetch = require('ak-fetch');
+import akFetch from 'ak-fetch';
 
 const result = await akFetch({
     url: 'https://api.example.com/bulk',
@@ -60,6 +124,8 @@ console.log(`Processed ${result.rowCount} records in ${result.clockTime}`);
 ### Streaming Large Files
 
 ```javascript
+import akFetch from 'ak-fetch';
+
 const result = await akFetch({
     url: 'https://api.example.com/events',
     data: './million-records.jsonl',
@@ -73,6 +139,8 @@ const result = await akFetch({
 ### Multiple Endpoints
 
 ```javascript
+import akFetch from 'ak-fetch';
+
 const results = await akFetch([
     {
         url: 'https://api1.example.com/users',
