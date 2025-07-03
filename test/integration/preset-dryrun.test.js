@@ -1,9 +1,10 @@
+// @ts-nocheck
 /**
  * @file Preset Dry Run Integration Test
  * @description Test preset functionality using dry run mode
  */
 
-const akFetch = require('../../index');
+import akFetch from '../../index.js';
 
 describe('Preset Integration with Dry Run', () => {
     

@@ -1,6 +1,8 @@
 # projects
 amc/*
-
+benchmarks/results/*
+!benchmarks/results/.gitkeep
+CLAUDE.md
 scratch.mjs
 testData/*
 !testData/.gitkeep
@@ -136,3 +138,4 @@ dist
 .pnp.*
 logs.txt
 .DS_Store
+CLAUDE.md

@@ -1,11 +1,12 @@
 // @ts-nocheck
-const main = require('../../index.js');
-const { execSync } = require("child_process");
-const u = require('ak-tools');
-const { Readable } = require('stream');
-const path = require('path');
+import { vi } from 'vitest';
+import main from '../../index.js';
+import { execSync } from "child_process";
+import u from 'ak-tools';
+import { Readable } from 'stream';
+import path from 'path';
 const TEMP_DIR = path.resolve('./logs');
-const { CookieJar } = require('tough-cookie');
+import { CookieJar } from 'tough-cookie';
 
 /** @typedef {import('../../types.js').BatchRequestConfig} Config */
 /** @typedef {import('../../types.js').Result} Result */
@@ -13,7 +14,7 @@ const { CookieJar } = require('tough-cookie');
 const REQUEST_BIN = `https://eokmttd9crhj9g7.m.pipedream.net`;
 
 beforeAll(() => {
-	jest.setTimeout(30000);
+	// Timeout is handled in vitest.config.js
 });
 
 test('direct fetch', () => {

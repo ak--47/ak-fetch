@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 
-const yargs = require('yargs');
-const { version } = /** @type {{ version: string }} */ (require('./package.json'));
-const u = require('ak-tools');
-const { createLogger } = require('./lib/logger');
+import yargs from 'yargs';
+import { readFileSync } from 'fs';
+import u from 'ak-tools';
+import { createLogger } from './lib/logger.js';
+
+// Read package.json for version
+const packageJson = JSON.parse(readFileSync('./package.json', 'utf8'));
+const { version } = packageJson;
 
 async function cliParams() {
 	// @ts-ignore
@@ -457,4 +461,4 @@ if (require.main === module) {
 	})();
 }
 
-module.exports = cliParams;
+export default cliParams;

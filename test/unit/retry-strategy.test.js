@@ -1,9 +1,11 @@
+// @ts-nocheck
 /**
  * Unit tests for RetryStrategy
  */
 
-const RetryStrategy = require('../../lib/retry-strategy');
-const { RetryError, RateLimitError } = require('../../lib/errors');
+import { vi } from 'vitest';
+import RetryStrategy from '../../lib/retry-strategy.js';
+import { RetryError, RateLimitError } from '../../lib/errors.js';
 
 describe('RetryStrategy', () => {
     let retryStrategy;
@@ -126,7 +128,7 @@ describe('RetryStrategy', () => {
         });
 
         test('should use custom retry handler', () => {
-            const customHandler = jest.fn().mockReturnValue(true);
+            const customHandler = vi.fn().mockReturnValue(true);
             const strategy = new RetryStrategy({ retryHandler: customHandler });
             
             const error = { statusCode: 418 }; // I'm a teapot
@@ -157,7 +159,7 @@ describe('RetryStrategy', () => {
 
     describe('execute', () => {
         test('should succeed on first try', async () => {
-            const fn = jest.fn().mockResolvedValue('success');
+            const fn = vi.fn().mockResolvedValue('success');
             const context = { url: 'http://test.com' };
             
             const result = await retryStrategy.execute(fn, context);
@@ -168,7 +170,7 @@ describe('RetryStrategy', () => {
         });
 
         test('should retry on retryable errors', async () => {
-            const fn = jest.fn()
+            const fn = vi.fn()
                 .mockRejectedValueOnce({ statusCode: 500 })
                 .mockRejectedValueOnce({ statusCode: 502 })
                 .mockResolvedValue('success');
@@ -181,7 +183,7 @@ describe('RetryStrategy', () => {
 
         test('should fail after max retries', async () => {
             const error = { statusCode: 500 };
-            const fn = jest.fn().mockRejectedValue(error);
+            const fn = vi.fn().mockRejectedValue(error);
             
             try {
                 await retryStrategy.execute(fn);
@@ -195,7 +197,7 @@ describe('RetryStrategy', () => {
 
         test('should not retry on non-retryable errors', async () => {
             const error = { statusCode: 400 };
-            const fn = jest.fn().mockRejectedValue(error);
+            const fn = vi.fn().mockRejectedValue(error);
             
             await expect(retryStrategy.execute(fn)).rejects.toMatchObject({ statusCode: 400 });
             expect(fn).toHaveBeenCalledTimes(1);
@@ -203,7 +205,7 @@ describe('RetryStrategy', () => {
 
         test('should include delay between retries', async () => {
             const strategy = new RetryStrategy({ baseDelay: 50, maxRetries: 2 });
-            const fn = jest.fn()
+            const fn = vi.fn()
                 .mockRejectedValueOnce({ statusCode: 500 })
                 .mockResolvedValue('success');
             
@@ -216,8 +218,8 @@ describe('RetryStrategy', () => {
         });
 
         test('should log retry attempts when verbose', async () => {
-            const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-            const fn = jest.fn()
+            const consoleSpy = vi.spyOn(console, 'log').mockImplementation();
+            const fn = vi.fn()
                 .mockRejectedValueOnce({ statusCode: 500, message: 'Server Error' })
                 .mockResolvedValue('success');
             

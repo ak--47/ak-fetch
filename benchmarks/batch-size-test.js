@@ -1,22 +1,32 @@
+//@ts-nocheck
 /**
  * Batch Size Optimization Benchmark
  * 
- * Tests different batch sizes to find optimal batching strategy
- * for different data volumes and network conditions.
+ * Tests different batch sizes against the Mixpanel API to find optimal batching strategy
+ * for real-world production workloads with actual analytics data.
  */
 
-const akFetch = require('../index.js');
-const { performance } = require('perf_hooks');
-const fs = require('fs');
+import akFetch from '../index.js';
+import { performance } from 'perf_hooks';
+import fs from 'fs';
+import { getDatasetSize, getDatasetFile, logDatasetInfo } from './dataset-helper.js';
+import dotenv from 'dotenv';
+dotenv.config();
 
-// Mock HTTP server endpoint for testing
-const TEST_URL = 'https://httpbin.org/post';
+// Mixpanel Import API endpoint
+const TEST_URL = 'https://api.mixpanel.com/import';
+const MIXPANEL_AUTH = process.env.MIXPANEL_AUTH;
+
+if (!MIXPANEL_AUTH) {
+    console.error('❌ MIXPANEL_AUTH environment variable not set');
+    process.exit(1);
+}
 
 /**
  * Run benchmark with specific batch size
  */
 async function runBatchSizeTest(batchSize, dataSize = '100k') {
-    const dataFile = `./testData/${dataSize}.ndjson`;
+    const dataFile = getDatasetFile(dataSize);
     const testName = `batch-size-${batchSize}-${dataSize}`;
     
     console.log(`\n📦 Testing batch size: ${batchSize} (${dataSize} dataset)`);
@@ -32,10 +42,17 @@ async function runBatchSizeTest(batchSize, dataSize = '100k') {
             concurrency: 15, // Fixed concurrency for batch size comparison
             verbose: true,
             retries: 3,
-            timeout: 30000,
+            timeout: 60000, // Increased timeout for Mixpanel API
             enableConnectionPooling: true,
             storeResponses: false,
-            maxResponseBuffer: 10
+            maxResponseBuffer: 10,
+            headers: {
+                'Authorization': MIXPANEL_AUTH,
+                'Content-Type': 'application/json'
+            },
+            searchParams: {
+                strict: 1 // Enable strict validation for real data quality
+            }
         });
         
         const endTime = performance.now();
@@ -89,33 +106,52 @@ async function runBatchSizeTest(batchSize, dataSize = '100k') {
  */
 async function runBatchSizeBenchmark() {
     console.log('📦 ak-fetch Batch Size Optimization Benchmark\n');
+    logDatasetInfo();
     console.log('Testing different batch sizes to find optimal batching strategy...\n');
     
     const batchSizes = [
-      500,
-	  1000,
-	  2000
+        250,   // Small batch - good for real-time processing
+        500,   // Medium batch - balanced approach
+        1000,  // Large batch - high throughput
+        2000,  // Optimal Mixpanel batch size        
     ];
     
+    const datasetSize = getDatasetSize();
     const results = [];
     
-    // Test with 100k dataset
-    console.log('📊 Testing with 100k dataset:');
-    for (const batchSize of batchSizes) {
-        const result = await runBatchSizeTest(batchSize, '100k');
-        results.push(result);
-        
-        // Brief pause between tests
-        await new Promise(resolve => setTimeout(resolve, 1500));
+    if (datasetSize === '100k' || datasetSize === 'both') {
+        // Test with 100k dataset
+        console.log('📊 Testing with 100k dataset:');
+        for (const batchSize of batchSizes) {
+            const result = await runBatchSizeTest(batchSize, '100k');
+            results.push(result);
+            
+            // Brief pause between tests
+            await new Promise(resolve => setTimeout(resolve, 1500));
+        }
     }
     
-    // Test optimal batch size with 1m dataset
-    console.log('\n📊 Testing optimal batch size with 1m dataset:');
-    const optimalBatchSize = findOptimalBatchSize(results);
-    console.log(`\nOptimal batch size: ${optimalBatchSize}`);
-    
-    const largeResult = await runBatchSizeTest(optimalBatchSize, '1m');
-    results.push(largeResult);
+    if (datasetSize === '1m' || datasetSize === 'both') {
+        // Test optimal batch size with 1m dataset
+        if (datasetSize === 'both') {
+            console.log('\n📊 Testing optimal batch size with 1m dataset:');
+            const optimalBatchSize = findOptimalBatchSize(results);
+            console.log(`\nOptimal batch size: ${optimalBatchSize}`);
+            
+            const largeResult = await runBatchSizeTest(optimalBatchSize, '1m');
+            results.push(largeResult);
+        } else {
+            // If only testing 1m, test all batch sizes
+            console.log('📊 Testing with 1m dataset:');
+            for (const batchSize of batchSizes) {
+                const result = await runBatchSizeTest(batchSize, '1m');
+                results.push(result);
+                
+                // Brief pause between tests
+                await new Promise(resolve => setTimeout(resolve, 1500));
+            }
+        }
+    }
     
     // Save results
     await saveResults('batch-size-benchmark', results);
@@ -255,11 +291,13 @@ function generateBatchSizeReport(results) {
         console.log(`   Memory: ${largeResult.memory.peakHeapUsed}MB peak`);
     }
     
-    console.log('\n💡 GUIDELINES:');
-    console.log('   • Small batches (1-50): Use for real-time streaming or when API has strict rate limits');
-    console.log('   • Medium batches (51-500): Best balance of performance and resource usage');
-    console.log('   • Large batches (500+): Maximum throughput for bulk data processing');
-    console.log('   • Consider API payload limits and timeout constraints when choosing batch size');
+    console.log('\n💡 MIXPANEL API GUIDELINES:');
+    console.log('   • Small batches (250-500): Use for real-time event streaming with low latency');
+    console.log('   • Medium batches (1000-1500): Best balance of performance and API responsiveness');
+    console.log('   • Large batches (2000+): Maximum throughput for historical data imports');
+    console.log('   • Mixpanel recommends 2000 events per batch for optimal performance');
+    console.log('   • Consider rate limits: 2000 events/hour for free accounts, higher for paid');
+    console.log('   • Monitor error rates as larger batches may trigger validation failures');
 }
 
 /**
@@ -287,8 +325,10 @@ async function saveResults(testType, results) {
 }
 
 // Run benchmark if called directly
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
+    // Default to 100k dataset when run directly
+    process.env.DATASET_SIZE = process.env.DATASET_SIZE || '100k';
     runBatchSizeBenchmark().catch(console.error);
 }
 
-module.exports = { runBatchSizeBenchmark };
+export { runBatchSizeBenchmark };

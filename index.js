@@ -6,29 +6,30 @@
  * 2025 production-ready version with advanced features
  */
 
-const RunQueue = require("run-queue");
-const { json, isJSONStr, comma, makeExist } = require("ak-tools");
-const cli = require('./cli');
-const { execSync } = require('child_process');
-const { Readable } = require('stream');
-const path = require('path');
-const { createReadStream, existsSync } = require('fs');
-require('dotenv').config({ debug: false, override: false });
+import RunQueue from "run-queue";
+import { json, isJSONStr, comma, makeExist } from "ak-tools";
+import cli from './cli.js';
+import { execSync } from 'child_process';
+import { Readable } from 'stream';
+import path from 'path';
+import { createReadStream, existsSync } from 'fs';
+import { config as dotenvConfig } from 'dotenv';
+dotenvConfig({ debug: false, override: false });
 
 // Import new modular components
-const HttpClient = require('./lib/http-client');
-const CircularBuffer = require('./lib/circular-buffer');
-const StreamProcessors = require('./lib/stream-processors');
-const { createLogger } = require('./lib/logger');
-const { getPresetTransform, applyPresetTransform } = require('./lib/presets');
-const { 
+import HttpClient from './lib/http-client.js';
+import CircularBuffer from './lib/circular-buffer.js';
+import StreamProcessors from './lib/stream-processors.js';
+import { createLogger } from './lib/logger.js';
+import { getPresetTransform, applyPresetTransform } from './lib/presets.js';
+import { 
     AkFetchError, 
     NetworkError, 
     TimeoutError, 
     ValidationError,
     ConfigurationError,
     MemoryError 
-} = require('./lib/errors');
+} from './lib/errors.js';
 
 
 /** @typedef {import("./types").BatchRequestConfig} BatchRequestConfig */
@@ -1617,4 +1618,4 @@ if (require.main === module) {
         });
 }
 
-module.exports = main;
+export default main;

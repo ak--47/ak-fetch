@@ -1,14 +1,16 @@
+// @ts-nocheck
 /**
  * @file Preset Transform Unit Tests
  * @description Tests for vendor-specific data transformation presets
  */
 
-const {
+import { vi } from 'vitest';
+import {
     getAvailablePresets,
     getPresetTransform,
     applyPresetTransform,
     PRESET_REGISTRY
-} = require('../../lib/presets');
+} from '../../lib/presets.js';
 
 describe('Preset System', () => {
     describe('getAvailablePresets', () => {
@@ -68,7 +70,7 @@ describe('Preset System', () => {
         });
 
         test('calls error handler on transform error', () => {
-            const errorHandler = jest.fn();
+            const errorHandler = vi.fn();
             const testData = null; // This should cause an error
             
             const result = applyPresetTransform(testData, 'mixpanel', errorHandler);

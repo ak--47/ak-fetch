@@ -330,3 +330,12 @@ export interface Result {
   /** Number of configurations processed (only in multi-config mode) */
   configCount?: number;
 }
+
+/**
+ * Main ak-fetch function that processes HTTP requests with batching, retry logic, and streaming
+ */
+export default function akFetch(config: BatchRequestConfig): Promise<Result>;
+export default function akFetch(config: BatchRequestConfig[]): Promise<Result[]>;
+
+// Named exports for convenience
+export { BatchRequestConfig, Result, HttpResponse };

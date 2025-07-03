@@ -1,6 +1,11 @@
 {
-	"jest.jestCommandLine": "npm run test --",
-	"jest.runMode": "on-demand",
+	"vitest.enable": true,
+	"vitest.commandLine": "npm run test",
+	"vitest.include": ["test/**/*.test.js"],
+	"vitest.exclude": ["**/node_modules/**", "**/dist/**"],
 	"js/ts.implicitProjectConfig.checkJs": true,
-  }
+	"cSpell.words": [
+		"backpressure"
+	]
+}
   

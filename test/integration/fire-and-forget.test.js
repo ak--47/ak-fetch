@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Fire-and-Forget Mode Integration Tests
  * 
@@ -5,7 +6,7 @@
  * and no response storage or error handling occurs.
  */
 
-const akFetch = require('../../index');
+import akFetch from '../../index.js';
 
 describe('Fire-and-Forget Mode', () => {
 	const mockUrl = 'https://httpbin.org/post';

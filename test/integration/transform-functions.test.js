@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Transform Functions Integration Tests
  * 
@@ -5,7 +6,7 @@
  * different data types, error handling, and performance characteristics.
  */
 
-const akFetch = require('../../index');
+import akFetch from '../../index.js';
 
 describe('Transform Functions', () => {
     const mockUrl = 'https://httpbin.org/post';

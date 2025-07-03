@@ -1,8 +1,9 @@
+// @ts-nocheck
 /**
  * Unit tests for Error classes
  */
 
-const {
+import {
     AkFetchError,
     NetworkError,
     TimeoutError,
@@ -12,7 +13,7 @@ const {
     ConfigurationError,
     SSLError,
     MemoryError
-} = require('../../lib/errors');
+} from '../../lib/errors.js';
 
 describe('Error Classes', () => {
     describe('AkFetchError', () => {

@@ -1,12 +1,18 @@
+// @ts-nocheck
 /**
  * Unit tests for FormDataHandler
  */
 
-const FormDataHandler = require('../../lib/form-data-handler');
-const FormData = require('form-data');
-const { Readable } = require('stream');
-const { writeFileSync, unlinkSync, existsSync } = require('fs');
-const path = require('path');
+import FormDataHandler from '../../lib/form-data-handler.js';
+import FormData from 'form-data';
+import { Readable } from 'stream';
+import { writeFileSync, unlinkSync, existsSync } from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 describe('FormDataHandler', () => {
     let handler;
