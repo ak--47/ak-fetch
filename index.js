@@ -820,7 +820,7 @@ async function createDataStream(config) {
     // For GET/HEAD/OPTIONS requests without data
     const method = config.method || 'POST';
     if (['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase())) {
-        return Readable.from([null]);
+        return Readable.from([{}]); // Use empty object instead of null for object mode streams
     }
 
     throw new ValidationError('No valid data source provided');
@@ -928,7 +928,10 @@ async function processDataStream(stream, config, logger) {
 
     // Process stream data
     for await (const data of stream) {
-        if (data !== null) {  // Skip null data for GET requests
+        const isGetRequest = ['GET', 'HEAD', 'OPTIONS'].includes((config.method || 'POST').toUpperCase());
+        const isEmptyGetData = isGetRequest && typeof data === 'object' && data !== null && Object.keys(data).length === 0;
+        
+        if (data !== null && !isEmptyGetData) {  // Skip null data and empty objects for GET requests
             let processedData = data;
             
             // Clone data if requested to avoid mutations (do this before any transforms)
@@ -979,10 +982,15 @@ async function processDataStream(stream, config, logger) {
             rowCount++;
         }
 
-        // Process batch when it reaches batchSize
-        if (batch.length >= batchSize || (data === null && batch.length > 0)) {
-            addBatchToQueue(batch);
-            batch = [];
+        // Process batch when it reaches batchSize or handle GET requests
+        if (batch.length >= batchSize || (data === null && batch.length > 0) || (isEmptyGetData && batch.length === 0)) {
+            if (isEmptyGetData && batch.length === 0) {
+                // For GET requests with no data, create a single empty batch to trigger the request
+                addBatchToQueue([]);
+            } else {
+                addBatchToQueue(batch);
+                batch = [];
+            }
         }
 
         // Pause stream if queue is full
@@ -1032,7 +1040,7 @@ async function processDataStream(stream, config, logger) {
             try {
                 const requestConfig = {
                     ...config,
-                    data: batchData.length === 1 ? batchData[0] : batchData
+                    data: batchData.length === 0 ? undefined : (batchData.length === 1 ? batchData[0] : batchData)
                 };
 
                 const response = await httpClient.request(requestConfig);

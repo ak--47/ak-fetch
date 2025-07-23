@@ -1,5 +1,4 @@
 #! /usr/bin/env node
-"use strict";
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -38,7 +37,6 @@ function createLogger(options = {}) {
 var import_readline, import_ak_tools, AkLogger;
 var init_logger = __esm({
   "lib/logger.js"() {
-    "use strict";
     import_readline = __toESM(require("readline"), 1);
     import_ak_tools = require("ak-tools");
     AkLogger = class _AkLogger {
@@ -953,7 +951,6 @@ tags must be valid JSON`);
 var import_yargs, import_fs, import_ak_tools2, import_meta, packageJson, version, hero, banner, welcome, cli_default;
 var init_cli = __esm({
   "cli.js"() {
-    "use strict";
     import_yargs = __toESM(require("yargs"), 1);
     import_fs = require("fs");
     import_ak_tools2 = __toESM(require("ak-tools"), 1);
@@ -1000,7 +997,6 @@ var init_cli = __esm({
 var AkFetchError, NetworkError, TimeoutError, RetryError, ValidationError, RateLimitError, ConfigurationError, SSLError, MemoryError;
 var init_errors = __esm({
   "lib/errors.js"() {
-    "use strict";
     AkFetchError = class extends Error {
       constructor(message, options = {}) {
         super(message);
@@ -1094,7 +1090,6 @@ var init_errors = __esm({
 var RetryStrategy, retry_strategy_default;
 var init_retry_strategy = __esm({
   "lib/retry-strategy.js"() {
-    "use strict";
     init_errors();
     RetryStrategy = class {
       /**
@@ -1474,7 +1469,6 @@ var init_retry_strategy = __esm({
 var import_tough_cookie, AkCookieJar, cookie_jar_default;
 var init_cookie_jar = __esm({
   "lib/cookie-jar.js"() {
-    "use strict";
     import_tough_cookie = require("tough-cookie");
     AkCookieJar = class {
       constructor(options = {}) {
@@ -1734,7 +1728,6 @@ var init_cookie_jar = __esm({
 var import_form_data, import_fs2, import_path, FormDataHandler, form_data_handler_default;
 var init_form_data_handler = __esm({
   "lib/form-data-handler.js"() {
-    "use strict";
     import_form_data = __toESM(require("form-data"), 1);
     import_fs2 = require("fs");
     import_path = require("path");
@@ -2009,7 +2002,6 @@ var init_form_data_handler = __esm({
 var import_https, import_http, import_url, import_querystring, HttpClient, http_client_default;
 var init_http_client = __esm({
   "lib/http-client.js"() {
-    "use strict";
     import_https = require("https");
     import_http = require("http");
     import_url = require("url");
@@ -2352,7 +2344,6 @@ var init_http_client = __esm({
 var CircularBuffer, circular_buffer_default;
 var init_circular_buffer = __esm({
   "lib/circular-buffer.js"() {
-    "use strict";
     CircularBuffer = class {
       /**
        * Create a new circular buffer
@@ -2662,7 +2653,6 @@ var init_circular_buffer = __esm({
 var import_stream, import_fs3, import_promises, StreamProcessors, stream_processors_default;
 var init_stream_processors = __esm({
   "lib/stream-processors.js"() {
-    "use strict";
     import_stream = require("stream");
     import_fs3 = require("fs");
     import_promises = require("stream/promises");
@@ -3154,10 +3144,9 @@ function applyPresetTransform(record, presetName, errorHandler) {
 var import_murmurhash, import_dayjs, import_utc, import_json_stable_stringify, MAX_STR_LEN, PRESET_REGISTRY;
 var init_presets = __esm({
   "lib/presets.js"() {
-    "use strict";
     import_murmurhash = __toESM(require("murmurhash"), 1);
     import_dayjs = __toESM(require("dayjs"), 1);
-    import_utc = __toESM(require("dayjs/plugin/utc"), 1);
+    import_utc = __toESM(require("dayjs/plugin/utc.js"), 1);
     import_json_stable_stringify = __toESM(require("json-stable-stringify"), 1);
     import_dayjs.default.extend(import_utc.default);
     MAX_STR_LEN = 255;
@@ -3493,7 +3482,7 @@ async function createDataStream(config) {
   }
   const method = config.method || "POST";
   if (["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase())) {
-    return import_stream2.Readable.from([null]);
+    return import_stream2.Readable.from([{}]);
   }
   throw new ValidationError("No valid data source provided");
 }
@@ -3547,7 +3536,9 @@ async function processDataStream(stream, config, logger) {
     }
   });
   for await (const data of stream) {
-    if (data !== null) {
+    const isGetRequest = ["GET", "HEAD", "OPTIONS"].includes((config.method || "POST").toUpperCase());
+    const isEmptyGetData = isGetRequest && typeof data === "object" && data !== null && Object.keys(data).length === 0;
+    if (data !== null && !isEmptyGetData) {
       let processedData = data;
       if (config.clone) {
         processedData = typeof data === "object" && data !== null ? JSON.parse(JSON.stringify(data)) : data;
@@ -3585,9 +3576,13 @@ async function processDataStream(stream, config, logger) {
       batch.push(processedData);
       rowCount++;
     }
-    if (batch.length >= batchSize || data === null && batch.length > 0) {
-      addBatchToQueue(batch);
-      batch = [];
+    if (batch.length >= batchSize || data === null && batch.length > 0 || isEmptyGetData && batch.length === 0) {
+      if (isEmptyGetData && batch.length === 0) {
+        addBatchToQueue([]);
+      } else {
+        addBatchToQueue(batch);
+        batch = [];
+      }
     }
     if (queue.queued >= maxTasks && !isStreamPaused) {
       stream.pause();
@@ -3617,7 +3612,7 @@ async function processDataStream(stream, config, logger) {
       try {
         const requestConfig = {
           ...config,
-          data: batchData.length === 1 ? batchData[0] : batchData
+          data: batchData.length === 0 ? void 0 : batchData.length === 1 ? batchData[0] : batchData
         };
         const response = await httpClient.request(requestConfig);
         if (responseBuffer) {

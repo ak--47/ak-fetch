@@ -5,7 +5,7 @@ import type { Readable } from "stream";
 /**
  * Main configuration object that controls all aspects of HTTP request processing
  */
-export interface BatchRequestConfig {
+interface BatchRequestConfig {
   /**
    * The target URL for HTTP requests
    * @example "https://api.example.com/users"
@@ -275,7 +275,7 @@ export interface BatchRequestConfig {
 /**
  * Individual HTTP response object structure
  */
-export interface HttpResponse {
+interface HttpResponse {
   /** Actual response content from the API (parsed JSON, text, etc.) */
   data: any;
   /** HTTP status code (200, 404, 500, etc.) */
@@ -293,7 +293,7 @@ export interface HttpResponse {
 /**
  * Result object returned by ak-fetch operations
  */
-export interface Result {
+interface Result {
   /** Array of structured HTTP response objects from the API, or strings in curl/dry-run mode */
   responses: HttpResponse[] | string[] | any[];
 
@@ -356,9 +356,9 @@ export interface Result {
  * ```
  */
 declare function akFetch(config: BatchRequestConfig): Promise<Result>;
-declare function akFetch(config: BatchRequestConfig[]): Promise<Result[]>;
+declare function akFetch(config: BatchRequestConfig[]): Promise<Result>;
 
 export default akFetch;
 
-// Named exports for convenience
+// Named exports for convenience  
 export { BatchRequestConfig, Result, HttpResponse };
