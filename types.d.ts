@@ -52,7 +52,7 @@ interface BatchRequestConfig {
    * URL query parameters object
    * @example { api_key: "123", format: "json" }
    */
-  searchParams?: Record<string, string>;
+  searchParams?: Record<string, string> | null;
 
   /**
    * Additional body parameters merged with payload

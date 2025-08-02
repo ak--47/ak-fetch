@@ -1,6 +1,6 @@
 {
 	"name": "ak-fetch",
-	"version": "2.0.11",
+	"version": "2.0.12",
 	"type": "module",
 	"description": "Production-ready HTTP client for bulk operations with connection pooling, exponential backoff, streaming, and comprehensive error handling",
 	"main": "index.js",
@@ -28,6 +28,8 @@
 		"test:integration": "vitest run test/integration",
 		"test:coverage": "vitest run --coverage && open ./coverage/index.html",
 		"test:types": "tsc --noEmit test-types.ts",
+		"test:types:consumer": "tsc --project tsconfig.consumer.json --noEmit",
+		"typecheck": "npm run test:types:consumer && echo '✅ Consumer type definitions are valid'",
 		"build:cjs": "esbuild index.js --bundle --platform=node --format=cjs --outfile=dist/index.cjs --external:ak-tools --external:yargs --external:undici --external:run-queue --external:dotenv --external:form-data --external:tough-cookie --external:readline --external:querystring --external:murmurhash --external:json-stable-stringify --external:fetch-retry --external:dayjs",
 		"build": "npm run build:cjs",
 		"prepare": "npm run build",
