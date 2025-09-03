@@ -1005,6 +1005,8 @@ var init_errors = __esm({
         this.statusCode = options.statusCode;
         this.url = options.url;
         this.method = options.method;
+        this.body = options.body;
+        this.headers = options.headers;
         this.retryCount = options.retryCount || 0;
         this.timestamp = (/* @__PURE__ */ new Date()).toISOString();
         Error.captureStackTrace(this, this.constructor);
@@ -1018,6 +1020,8 @@ var init_errors = __esm({
           statusCode: this.statusCode,
           url: this.url,
           method: this.method,
+          body: this.body,
+          headers: this.headers,
           retryCount: this.retryCount,
           timestamp: this.timestamp
         };
@@ -3444,6 +3448,11 @@ async function executeSingleRequest(config, logger) {
       stats: getMemoryStats()
     };
     return result;
+  } catch (error) {
+    if (config.errorHandler && typeof config.errorHandler === "function") {
+      config.errorHandler(error);
+    }
+    throw error;
   } finally {
     httpClient.destroy();
   }

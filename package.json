@@ -1,6 +1,6 @@
 {
 	"name": "ak-fetch",
-	"version": "2.0.12",
+	"version": "2.0.13",
 	"type": "module",
 	"description": "Production-ready HTTP client for bulk operations with connection pooling, exponential backoff, streaming, and comprehensive error handling",
 	"main": "index.js",

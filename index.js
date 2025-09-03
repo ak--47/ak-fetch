@@ -730,6 +730,12 @@ async function executeSingleRequest(config, logger) {
             stats: getMemoryStats()
         };
         return result;
+    } catch (error) {
+        // Call errorHandler if provided
+        if (config.errorHandler && typeof config.errorHandler === 'function') {
+            config.errorHandler(error);
+        }
+        throw error;
     } finally {
         httpClient.destroy();
     }

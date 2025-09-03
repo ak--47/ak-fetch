@@ -44,6 +44,22 @@ describe('Error Classes', () => {
             expect(error.retryCount).toBe(2);
         });
 
+        test('should store response body and headers', () => {
+            const options = {
+                statusCode: 400,
+                url: 'https://example.com',
+                method: 'POST',
+                body: { error: 'Bad Request', details: 'Invalid data' },
+                headers: { 'content-type': 'application/json' }
+            };
+            
+            const error = new AkFetchError('HTTP 400: Bad Request', options);
+            
+            expect(error.body).toEqual({ error: 'Bad Request', details: 'Invalid data' });
+            expect(error.headers).toEqual({ 'content-type': 'application/json' });
+            expect(error.statusCode).toBe(400);
+        });
+
         test('should have proper error prototype chain', () => {
             const error = new AkFetchError('Test');
             
@@ -214,6 +230,21 @@ describe('Error Classes', () => {
             expect(parsed.code).toBe('ECONNREFUSED');
             expect(parsed.url).toBe('https://example.com');
             expect(parsed.retryCount).toBe(1);
+        });
+
+        test('should serialize body and headers in toJSON', () => {
+            const error = new AkFetchError('HTTP error', {
+                statusCode: 400,
+                body: { error: 'Bad Request' },
+                headers: { 'content-type': 'application/json' }
+            });
+            
+            const serialized = JSON.stringify(error);
+            const parsed = JSON.parse(serialized);
+            
+            expect(parsed.body).toEqual({ error: 'Bad Request' });
+            expect(parsed.headers).toEqual({ 'content-type': 'application/json' });
+            expect(parsed.statusCode).toBe(400);
         });
 
         test('should handle errors without options', () => {
