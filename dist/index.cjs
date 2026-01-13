@@ -2117,7 +2117,7 @@ var init_http_client = __esm({
         requestHeaders = await this.cookieJar.addCookiesToHeaders(requestHeaders, requestUrl.toString());
         let requestBody = null;
         let processedData = data;
-        if (data && ["POST", "PUT", "PATCH"].includes(method)) {
+        if (data && ["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
           if (clone) {
             processedData = JSON.parse(JSON.stringify(data));
           }
@@ -3788,7 +3788,7 @@ function generateCurlCommand(config, data) {
       parts.push(`-H "${key}: ${value}"`);
     });
   }
-  if (["POST", "PUT", "PATCH"].includes(config.method?.toUpperCase()) && data) {
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(config.method?.toUpperCase()) && data) {
     const payload = typeof data === "string" ? data : JSON.stringify(data);
     parts.push(`-d '${payload}'`);
     const hasContentType = config.headers && Object.keys(config.headers).some((key) => key.toLowerCase() === "content-type");
