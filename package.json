@@ -23,6 +23,7 @@
 		"dist/index.cjs"
 	],
 	"scripts": {
+		"post": "npm run publish",
 		"test": "vitest run",
 		"test:unit": "vitest run test/unit",
 		"test:integration": "vitest run test/integration",
