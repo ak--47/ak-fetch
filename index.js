@@ -1412,8 +1412,8 @@ function generateCurlCommand(config, data) {
         });
     }
     
-    // Add data payload for POST/PUT/PATCH methods
-    if (['POST', 'PUT', 'PATCH'].includes(config.method?.toUpperCase()) && data) {
+    // Add data payload for POST/PUT/PATCH/DELETE methods
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(config.method?.toUpperCase()) && data) {
         const payload = typeof data === 'string' ? data : JSON.stringify(data);
         parts.push(`-d '${payload}'`);
         
