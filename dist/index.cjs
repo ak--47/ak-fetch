@@ -1203,12 +1203,16 @@ var init_retry_strategy = __esm({
        * 
        * @since 2.0.0
        */
-      shouldRetry(error, attempt) {
+      async shouldRetry(error, attempt) {
         if (attempt >= this.maxRetries) {
           return false;
         }
         if (this.retryHandler && typeof this.retryHandler === "function") {
-          return this.retryHandler(error, attempt);
+          const result = this.retryHandler(error, attempt);
+          if (result && typeof result.then === "function") {
+            return await result;
+          }
+          return result;
         }
         if (this.retryOnNetworkError && this.isNetworkError(error)) {
           return true;
@@ -1309,7 +1313,7 @@ var init_retry_strategy = __esm({
                 method: context.method
               });
             }
-            if (!this.shouldRetry(error, attempt - 1)) {
+            if (!await this.shouldRetry(error, attempt - 1)) {
               throw error;
             }
             const delay = this.calculateDelay(attempt - 1, error);
@@ -3169,6 +3173,17 @@ __export(index_exports, {
   default: () => index_default
 });
 module.exports = __toCommonJS(index_exports);
+async function invokeErrorHandler(handler, error, data = void 0) {
+  if (!handler || typeof handler !== "function") return;
+  try {
+    const result = data !== void 0 ? handler(error, data) : handler(error);
+    if (result && typeof result.then === "function") {
+      await result;
+    }
+  } catch (handlerError) {
+    console.error("Error in errorHandler:", handlerError);
+  }
+}
 async function main(PARAMS) {
   validateInput(PARAMS);
   if (Array.isArray(PARAMS)) {
@@ -3449,9 +3464,7 @@ async function executeSingleRequest(config, logger) {
     };
     return result;
   } catch (error) {
-    if (config.errorHandler && typeof config.errorHandler === "function") {
-      config.errorHandler(error);
-    }
+    await invokeErrorHandler(config.errorHandler, error);
     throw error;
   } finally {
     httpClient.destroy();
@@ -3557,9 +3570,8 @@ async function processDataStream(stream, config, logger) {
           processedData = applyPresetTransform(processedData, config.preset, config.errorHandler);
         } catch (error) {
           logger.error(`Preset transform error (${config.preset}): ${error.message}`);
-          if (config.errorHandler && typeof config.errorHandler === "function") {
-            config.errorHandler(error, processedData);
-          } else {
+          await invokeErrorHandler(config.errorHandler, error, processedData);
+          if (!config.errorHandler) {
             throw error;
           }
         }
@@ -3575,9 +3587,8 @@ async function processDataStream(stream, config, logger) {
           }
         } catch (error) {
           logger.error(`Transform error: ${error.message}`);
-          if (config.errorHandler && typeof config.errorHandler === "function") {
-            config.errorHandler(error, processedData);
-          } else {
+          await invokeErrorHandler(config.errorHandler, error, processedData);
+          if (!config.errorHandler) {
             throw error;
           }
         }
@@ -3638,9 +3649,8 @@ async function processDataStream(stream, config, logger) {
       } catch (error) {
         errorCount++;
         logger.error("Batch processing failed:", error.message);
-        if (config.errorHandler && typeof config.errorHandler === "function") {
-          config.errorHandler(error);
-        } else {
+        await invokeErrorHandler(config.errorHandler, error);
+        if (!config.errorHandler) {
           if (responseBuffer) {
             const errorDetails = {
               error: error.message,
@@ -3824,9 +3834,8 @@ async function handleDryRun(config, logger, isMainJob) {
           processedData = applyPresetTransform(processedData, config.preset, config.errorHandler);
         } catch (error) {
           logger.error(`Preset transform error in dry run (${config.preset}): ${error.message}`);
-          if (config.errorHandler && typeof config.errorHandler === "function") {
-            config.errorHandler(error, processedData);
-          } else {
+          await invokeErrorHandler(config.errorHandler, error, processedData);
+          if (!config.errorHandler) {
             throw error;
           }
         }
@@ -3842,9 +3851,8 @@ async function handleDryRun(config, logger, isMainJob) {
           }
         } catch (error) {
           logger.error(`Transform error in dry run: ${error.message}`);
-          if (config.errorHandler && typeof config.errorHandler === "function") {
-            config.errorHandler(error, processedData);
-          } else {
+          await invokeErrorHandler(config.errorHandler, error, processedData);
+          if (!config.errorHandler) {
             throw error;
           }
         }

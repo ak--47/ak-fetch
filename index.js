@@ -37,6 +37,31 @@ import {
 
 
 /**
+ * Invoke error handler with async support
+ * @param {Function} handler - Error handler function (sync or async)
+ * @param {Error} error - The error object
+ * @param {*} data - Optional data context
+ */
+async function invokeErrorHandler(handler, error, data = undefined) {
+    if (!handler || typeof handler !== 'function') return;
+
+    try {
+        const result = data !== undefined
+            ? handler(error, data)
+            : handler(error);
+
+        // If handler returns a Promise, await it
+        if (result && typeof result.then === 'function') {
+            await result;
+        }
+    } catch (handlerError) {
+        // Log but don't throw - errorHandler errors shouldn't break flow
+        console.error('Error in errorHandler:', handlerError);
+    }
+}
+
+
+/**
  * Main ak-fetch function for HTTP request processing
  * 
  * @description
@@ -732,9 +757,7 @@ async function executeSingleRequest(config, logger) {
         return result;
     } catch (error) {
         // Call errorHandler if provided
-        if (config.errorHandler && typeof config.errorHandler === 'function') {
-            config.errorHandler(error);
-        }
+        await invokeErrorHandler(config.errorHandler, error);
         throw error;
     } finally {
         httpClient.destroy();
@@ -953,9 +976,8 @@ async function processDataStream(stream, config, logger) {
                 } catch (error) {
                     // @ts-ignore
                     logger.error(`Preset transform error (${config.preset}): ${error.message}`);
-                    if (config.errorHandler && typeof config.errorHandler === 'function') {
-                        config.errorHandler(error, processedData);
-                    } else {
+                    await invokeErrorHandler(config.errorHandler, error, processedData);
+                    if (!config.errorHandler) {
                         throw error; // Preset transform errors should fail the operation
                     }
                 }
@@ -976,9 +998,8 @@ async function processDataStream(stream, config, logger) {
                 } catch (error) {
                     // @ts-ignore
                     logger.error(`Transform error: ${error.message}`);
-                    if (config.errorHandler && typeof config.errorHandler === 'function') {
-                        config.errorHandler(error, processedData);
-                    } else {
+                    await invokeErrorHandler(config.errorHandler, error, processedData);
+                    if (!config.errorHandler) {
                         throw error; // Transform errors should fail the operation
                     }
                 }
@@ -1073,10 +1094,9 @@ async function processDataStream(stream, config, logger) {
                 errorCount++;
                 // @ts-ignore
                 logger.error('Batch processing failed:', error.message);
-                
-                if (config.errorHandler && typeof config.errorHandler === 'function') {
-                    config.errorHandler(error);
-                } else {
+
+                await invokeErrorHandler(config.errorHandler, error);
+                if (!config.errorHandler) {
                     // Store error in response buffer if enabled
                     if (responseBuffer) {
                         // Include full error details including response body
@@ -1485,9 +1505,8 @@ async function handleDryRun(config, logger, isMainJob) {
                     processedData = applyPresetTransform(processedData, config.preset, config.errorHandler);
                 } catch (error) {
                     logger.error(`Preset transform error in dry run (${config.preset}): ${error.message}`);
-                    if (config.errorHandler && typeof config.errorHandler === 'function') {
-                        config.errorHandler(error, processedData);
-                    } else {
+                    await invokeErrorHandler(config.errorHandler, error, processedData);
+                    if (!config.errorHandler) {
                         throw error; // Preset transform errors should fail the operation
                     }
                 }
@@ -1507,9 +1526,8 @@ async function handleDryRun(config, logger, isMainJob) {
                     }
                 } catch (error) {
                     logger.error(`Transform error in dry run: ${error.message}`);
-                    if (config.errorHandler && typeof config.errorHandler === 'function') {
-                        config.errorHandler(error, processedData);
-                    } else {
+                    await invokeErrorHandler(config.errorHandler, error, processedData);
+                    if (!config.errorHandler) {
                         throw error; // Transform errors should fail the operation
                     }
                 }

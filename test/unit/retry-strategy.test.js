@@ -97,45 +97,68 @@ describe('RetryStrategy', () => {
     });
 
     describe('shouldRetry', () => {
-        test('should not retry when max attempts reached', () => {
+        test('should not retry when max attempts reached', async () => {
             const error = { statusCode: 500 };
             
-            expect(retryStrategy.shouldRetry(error, 3)).toBe(false);
-            expect(retryStrategy.shouldRetry(error, 4)).toBe(false);
+            expect(await retryStrategy.shouldRetry(error, 3)).toBe(false);
+            expect(await retryStrategy.shouldRetry(error, 4)).toBe(false);
         });
 
-        test('should retry on configured status codes', () => {
-            expect(retryStrategy.shouldRetry({ statusCode: 429 }, 0)).toBe(true);
-            expect(retryStrategy.shouldRetry({ statusCode: 500 }, 1)).toBe(true);
-            expect(retryStrategy.shouldRetry({ statusCode: 502 }, 2)).toBe(true);
+        test('should retry on configured status codes', async () => {
+            expect(await retryStrategy.shouldRetry({ statusCode: 429 }, 0)).toBe(true);
+            expect(await retryStrategy.shouldRetry({ statusCode: 500 }, 1)).toBe(true);
+            expect(await retryStrategy.shouldRetry({ statusCode: 502 }, 2)).toBe(true);
         });
 
-        test('should not retry on non-retryable status codes', () => {
-            expect(retryStrategy.shouldRetry({ statusCode: 400 }, 0)).toBe(false);
-            expect(retryStrategy.shouldRetry({ statusCode: 401 }, 0)).toBe(false);
-            expect(retryStrategy.shouldRetry({ statusCode: 404 }, 0)).toBe(false);
+        test('should not retry on non-retryable status codes', async () => {
+            expect(await retryStrategy.shouldRetry({ statusCode: 400 }, 0)).toBe(false);
+            expect(await retryStrategy.shouldRetry({ statusCode: 401 }, 0)).toBe(false);
+            expect(await retryStrategy.shouldRetry({ statusCode: 404 }, 0)).toBe(false);
         });
 
-        test('should retry on network errors', () => {
-            expect(retryStrategy.shouldRetry({ code: 'ENOTFOUND' }, 0)).toBe(true);
-            expect(retryStrategy.shouldRetry({ code: 'ECONNRESET' }, 1)).toBe(true);
-            expect(retryStrategy.shouldRetry({ name: 'NetworkError' }, 2)).toBe(true);
+        test('should retry on network errors', async () => {
+            expect(await retryStrategy.shouldRetry({ code: 'ENOTFOUND' }, 0)).toBe(true);
+            expect(await retryStrategy.shouldRetry({ code: 'ECONNRESET' }, 1)).toBe(true);
+            expect(await retryStrategy.shouldRetry({ name: 'NetworkError' }, 2)).toBe(true);
         });
 
-        test('should retry on timeout errors', () => {
-            expect(retryStrategy.shouldRetry({ code: 'ETIMEDOUT' }, 0)).toBe(true);
-            expect(retryStrategy.shouldRetry({ name: 'TimeoutError' }, 1)).toBe(true);
+        test('should retry on timeout errors', async () => {
+            expect(await retryStrategy.shouldRetry({ code: 'ETIMEDOUT' }, 0)).toBe(true);
+            expect(await retryStrategy.shouldRetry({ name: 'TimeoutError' }, 1)).toBe(true);
         });
 
-        test('should use custom retry handler', () => {
+        test('should use custom retry handler', async () => {
             const customHandler = vi.fn().mockReturnValue(true);
             const strategy = new RetryStrategy({ retryHandler: customHandler });
-            
+
             const error = { statusCode: 418 }; // I'm a teapot
-            const result = strategy.shouldRetry(error, 1);
-            
+            const result = await strategy.shouldRetry(error, 1);
+
             expect(customHandler).toHaveBeenCalledWith(error, 1);
             expect(result).toBe(true);
+        });
+
+        test('should support async retry handler', async () => {
+            const asyncHandler = vi.fn().mockImplementation(async (error, attempt) => {
+                await new Promise(r => setTimeout(r, 10));
+                return error.statusCode === 500;
+            });
+
+            const strategy = new RetryStrategy({ retryHandler: asyncHandler });
+            const error = { statusCode: 500 };
+
+            const result = await strategy.shouldRetry(error, 0);
+            expect(result).toBe(true);
+            expect(asyncHandler).toHaveBeenCalledWith(error, 0);
+        });
+
+        test('should maintain backward compatibility with sync retry handler', async () => {
+            const syncHandler = vi.fn().mockReturnValue(false);
+            const strategy = new RetryStrategy({ retryHandler: syncHandler });
+
+            const result = await strategy.shouldRetry({ statusCode: 400 }, 0);
+            expect(result).toBe(false);
+            expect(syncHandler).toHaveBeenCalledWith({ statusCode: 400 }, 0);
         });
     });
 

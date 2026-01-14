@@ -169,9 +169,12 @@ interface BatchRequestConfig {
   transform?: (item: any) => any;
 
   /**
-   * Custom error handling function
+   * Custom error handling function (can be async)
+   * @param error - The error that occurred
+   * @param data - Optional data context
+   * @returns void or Promise<void>
    */
-  errorHandler?: (error: any) => void;
+  errorHandler?: (error: any, data?: any) => void | Promise<void>;
 
   /**
    * Function called with each successful response
@@ -179,9 +182,12 @@ interface BatchRequestConfig {
   responseHandler?: (response: any) => void;
 
   /**
-   * Custom retry logic function
+   * Custom retry logic function (can be async)
+   * @param error - The error that occurred
+   * @param attempt - Current attempt number (0-indexed)
+   * @returns boolean or Promise<boolean> indicating whether to retry
    */
-  retryHandler?: (error: any, attempt: number) => boolean;
+  retryHandler?: (error: any, attempt: number) => boolean | Promise<boolean>;
 
   /**
    * Post-processing hook for array configurations
