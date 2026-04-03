@@ -1240,16 +1240,9 @@ var init_retry_strategy = __esm({
        * error type, status code, attempt count, and custom retry handlers.
        * Supports network errors, HTTP status codes, and timeout conditions.
        * 
-       * @param {Error} error - Error that occurred
-       * @param {number} [error.statusCode] - HTTP status code
-       * @param {string} [error.code] - Error code (e.g., 'ETIMEDOUT', 'ENOTFOUND')
-       * @param {string} [error.name] - Error name (e.g., 'NetworkError', 'TimeoutError')
-       * 
+       * @param {Error & {statusCode?: number, code?: string, type?: string}} error - Error that occurred
        * @param {number} attempt - Current attempt number (0-based)
-       * @description Must be less than maxRetries to retry
-       * 
-       * @returns {boolean} True if the error should be retried
-       * @description False if max attempts reached or error is not retryable
+       * @returns {Promise<boolean>} True if the error should be retried
        * 
        * @example
        * strategy.shouldRetry({ statusCode: 500 }, 0); // true (server error)
@@ -1289,13 +1282,8 @@ var init_retry_strategy = __esm({
        * Checks error codes, names, and types commonly associated with
        * network connectivity issues.
        * 
-       * @param {Error} error - Error to check
-       * @param {string} [error.code] - Error code to check
-       * @param {string} [error.name] - Error name to check
-       * @param {string} [error.type] - Error type to check
-       * 
+       * @param {Error & {code?: string, type?: string}} error - Error to check
        * @returns {boolean} True if the error is network-related
-       * @description Network errors are typically retryable
        * 
        * @example
        * strategy.isNetworkError({ code: 'ENOTFOUND' });     // true
@@ -1441,7 +1429,7 @@ var init_retry_strategy = __esm({
             return null;
           }
           const now = /* @__PURE__ */ new Date();
-          const secondsUntil = Math.max(0, Math.floor((date - now) / 1e3));
+          const secondsUntil = Math.max(0, Math.floor((date.getTime() - now.getTime()) / 1e3));
           return secondsUntil;
         } catch (error) {
           return null;
@@ -1454,18 +1442,9 @@ var init_retry_strategy = __esm({
        * Creates a specialized RateLimitError with parsed rate limit information
        * from HTTP response headers. Extracts retry timing and quota information.
        * 
-       * @param {Object} headers - HTTP response headers
-       * @param {string} [headers['retry-after']] - Retry-After header
-       * @param {string} [headers['x-ratelimit-limit']] - Rate limit quota
-       * @param {string} [headers['x-ratelimit-remaining']] - Remaining quota
-       * @param {string} [headers['x-rate-limit-limit']] - Alternative rate limit header
-       * @param {string} [headers['x-rate-limit-remaining']] - Alternative remaining header
-       * 
+       * @param {Record<string, string>} headers - HTTP response headers
        * @param {number} statusCode - HTTP status code (typically 429)
-       * @description Status code for the rate limit response
-       * 
        * @returns {RateLimitError} Specialized rate limit error
-       * @description Error with parsed rate limit metadata
        * 
        * @example
        * const headers = {
@@ -1545,7 +1524,7 @@ var init_cookie_jar = __esm({
        * Set a cookie from a Set-Cookie header
        * @param {string} cookieString - Cookie string from Set-Cookie header
        * @param {string} url - URL where the cookie was set
-       * @returns {Promise<Cookie|null>} The cookie that was set
+       * @returns {Promise<import('tough-cookie').Cookie|null>} The cookie that was set
        */
       async setCookie(cookieString, url) {
         if (!this.enabled) return null;
@@ -1560,7 +1539,7 @@ var init_cookie_jar = __esm({
        * Set multiple cookies from Set-Cookie headers
        * @param {string[]} cookieStrings - Array of cookie strings
        * @param {string} url - URL where the cookies were set
-       * @returns {Promise<Cookie[]>} Array of cookies that were set
+       * @returns {Promise<import('tough-cookie').Cookie[]>} Array of cookies that were set
        */
       async setCookies(cookieStrings, url) {
         if (!this.enabled || !Array.isArray(cookieStrings)) return [];
@@ -1588,7 +1567,7 @@ var init_cookie_jar = __esm({
       /**
        * Get cookies for a URL as Cookie objects
        * @param {string} url - URL to get cookies for
-       * @returns {Promise<Cookie[]>} Array of cookies
+       * @returns {Promise<import('tough-cookie').Cookie[]>} Array of cookies
        */
       async getCookies(url) {
         if (!this.enabled) return [];
@@ -1668,7 +1647,7 @@ var init_cookie_jar = __esm({
       }
       /**
        * Get all cookies from the jar
-       * @returns {Promise<Cookie[]>} Array of all cookies
+       * @returns {Promise<import('tough-cookie').Cookie[]>} Array of all cookies
        */
       async getAllCookies() {
         if (!this.enabled) return [];
@@ -1724,7 +1703,7 @@ var init_cookie_jar = __esm({
        * Process response headers to extract and store cookies
        * @param {Object} headers - Response headers
        * @param {string} url - URL of the response
-       * @returns {Promise<Cookie[]>} Cookies that were set
+       * @returns {Promise<import('tough-cookie').Cookie[]>} Cookies that were set
        */
       async processResponseHeaders(headers, url) {
         if (!this.enabled || !headers) return [];
@@ -2082,6 +2061,7 @@ var init_http_client = __esm({
           maxSockets: options.maxSockets || 256,
           maxFreeSockets: options.maxFreeSockets || 256,
           freeSocketTimeout: options.freeSocketTimeout || 3e4,
+          rejectUnauthorized: options.rejectUnauthorized !== false,
           ...options
         };
         this.httpsAgent = new import_https.Agent({
@@ -2089,7 +2069,7 @@ var init_http_client = __esm({
           maxSockets: this.options.maxSockets,
           maxFreeSockets: this.options.maxFreeSockets,
           timeout: this.options.freeSocketTimeout,
-          rejectUnauthorized: this.options.rejectUnauthorized !== false
+          rejectUnauthorized: this.options.rejectUnauthorized
         });
         this.httpAgent = new import_http.Agent({
           keepAlive: this.options.keepAlive,
