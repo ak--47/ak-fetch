@@ -6,7 +6,11 @@
 import { Readable } from 'stream';
 
 // Import types from the definition file
-import type { BatchRequestConfig, Result, HttpResponse } from './types.js';
+import type {
+  BatchRequestConfig, Result, HttpResponse,
+  AkFetchError, RetryError, NetworkError, TimeoutError,
+  ValidationError, RateLimitError, ConfigurationError, SSLError, MemoryError
+} from './types.js';
 
 // Since we can't import the actual function in a pure type test, we'll just test the types
 declare const akFetch: {
@@ -172,6 +176,77 @@ const fireAndForget: BatchRequestConfig = {
   url: 'https://api.example.com',
   data: [{ test: true }],
   retries: null
+};
+
+// Test error types
+function testErrorTypes(err: AkFetchError) {
+  const code: string | undefined = err.code;
+  const statusCode: number | undefined = err.statusCode;
+  const url: string | undefined = err.url;
+  const method: string | undefined = err.method;
+  const body: any = err.body;
+  const headers: Record<string, string> | undefined = err.headers;
+  const retryCount: number = err.retryCount;
+  const timestamp: string = err.timestamp;
+  const json: Record<string, any> = err.toJSON();
+}
+
+function testRetryError(err: RetryError) {
+  const type: 'RETRY_ERROR' = err.type;
+  const maxRetries: number | undefined = err.maxRetries;
+  const lastError: AkFetchError | undefined = err.lastError;
+  // statusCode and body are inherited from base (populated via copy-up)
+  const statusCode: number | undefined = err.statusCode;
+  const body: any = err.body;
+}
+
+function testNetworkError(err: NetworkError) {
+  const type: 'NETWORK_ERROR' = err.type;
+}
+
+function testTimeoutError(err: TimeoutError) {
+  const type: 'TIMEOUT_ERROR' = err.type;
+  const timeout: number | undefined = err.timeout;
+}
+
+function testValidationError(err: ValidationError) {
+  const type: 'VALIDATION_ERROR' = err.type;
+  const field: string | undefined = err.field;
+  const value: any = err.value;
+}
+
+function testRateLimitError(err: RateLimitError) {
+  const type: 'RATE_LIMIT_ERROR' = err.type;
+  const retryAfter: number | undefined = err.retryAfter;
+  const limit: number | undefined = err.limit;
+  const remaining: number | undefined = err.remaining;
+}
+
+function testConfigurationError(err: ConfigurationError) {
+  const type: 'CONFIGURATION_ERROR' = err.type;
+  const parameter: string | undefined = err.parameter;
+}
+
+function testSSLError(err: SSLError) {
+  const type: 'SSL_ERROR' = err.type;
+  const certificate: any = err.certificate;
+}
+
+function testMemoryError(err: MemoryError) {
+  const type: 'MEMORY_ERROR' = err.type;
+  const memoryUsage: any = err.memoryUsage;
+  const limit: number | undefined = err.limit;
+}
+
+// Test typed callbacks
+const typedCallbackConfig: BatchRequestConfig = {
+  url: 'https://api.example.com',
+  errorHandler: (error: AkFetchError) => {
+    console.log(error.statusCode, error.body, error.url);
+  },
+  retryHandler: (error: AkFetchError, attempt: number) => {
+    return error.statusCode !== 400 && attempt < 3;
+  }
 };
 
 console.log('✅ All TypeScript types are valid!');

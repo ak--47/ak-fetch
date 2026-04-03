@@ -17,6 +17,24 @@
 				"--ignore",
 				"./testData"
 			]
+		},
+		{
+			"type": "node",
+			"request": "launch",
+			"name": "typecheck",
+			"program": "${workspaceFolder}/node_modules/.bin/tsc",
+			"args": ["--noEmit"],
+			"console": "integratedTerminal",
+			"internalConsoleOptions": "neverOpen"
+		},
+		{
+			"type": "node",
+			"request": "launch",
+			"name": "typecheck (consumer)",
+			"program": "${workspaceFolder}/node_modules/.bin/tsc",
+			"args": ["--noEmit", "--project", "tsconfig.consumer.json"],
+			"console": "integratedTerminal",
+			"internalConsoleOptions": "neverOpen"
 		}
 	]
 }

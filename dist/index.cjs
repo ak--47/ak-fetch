@@ -1001,6 +1001,7 @@ var init_errors = __esm({
       constructor(message, options = {}) {
         super(message);
         this.name = this.constructor.name;
+        this.type = void 0;
         this.code = options.code;
         this.statusCode = options.statusCode;
         this.url = options.url;
@@ -1039,13 +1040,34 @@ var init_errors = __esm({
         this.type = "TIMEOUT_ERROR";
         this.timeout = options.timeout;
       }
+      toJSON() {
+        return {
+          ...super.toJSON(),
+          timeout: this.timeout
+        };
+      }
     };
     RetryError = class extends AkFetchError {
       constructor(message, options = {}) {
-        super(message, options);
+        super(message, {
+          ...options,
+          statusCode: options.statusCode ?? options.lastError?.statusCode,
+          body: options.body ?? options.lastError?.body
+        });
         this.type = "RETRY_ERROR";
         this.maxRetries = options.maxRetries;
         this.lastError = options.lastError;
+      }
+      toJSON() {
+        return {
+          ...super.toJSON(),
+          maxRetries: this.maxRetries,
+          lastError: this.lastError ? {
+            message: this.lastError.message,
+            name: this.lastError.name,
+            ...typeof this.lastError.toJSON === "function" ? this.lastError.toJSON() : {}
+          } : void 0
+        };
       }
     };
     ValidationError = class extends AkFetchError {
@@ -1054,6 +1076,13 @@ var init_errors = __esm({
         this.type = "VALIDATION_ERROR";
         this.field = options.field;
         this.value = options.value;
+      }
+      toJSON() {
+        return {
+          ...super.toJSON(),
+          field: this.field,
+          value: this.value
+        };
       }
     };
     RateLimitError = class extends AkFetchError {
@@ -1064,12 +1093,26 @@ var init_errors = __esm({
         this.limit = options.limit;
         this.remaining = options.remaining;
       }
+      toJSON() {
+        return {
+          ...super.toJSON(),
+          retryAfter: this.retryAfter,
+          limit: this.limit,
+          remaining: this.remaining
+        };
+      }
     };
     ConfigurationError = class extends AkFetchError {
       constructor(message, options = {}) {
         super(message, options);
         this.type = "CONFIGURATION_ERROR";
         this.parameter = options.parameter;
+      }
+      toJSON() {
+        return {
+          ...super.toJSON(),
+          parameter: this.parameter
+        };
       }
     };
     SSLError = class extends AkFetchError {
@@ -1078,6 +1121,12 @@ var init_errors = __esm({
         this.type = "SSL_ERROR";
         this.certificate = options.certificate;
       }
+      toJSON() {
+        return {
+          ...super.toJSON(),
+          certificate: this.certificate
+        };
+      }
     };
     MemoryError = class extends AkFetchError {
       constructor(message, options = {}) {
@@ -1085,6 +1134,13 @@ var init_errors = __esm({
         this.type = "MEMORY_ERROR";
         this.memoryUsage = options.memoryUsage;
         this.limit = options.limit;
+      }
+      toJSON() {
+        return {
+          ...super.toJSON(),
+          memoryUsage: this.memoryUsage,
+          limit: this.limit
+        };
       }
     };
   }
@@ -3170,6 +3226,15 @@ var init_presets = __esm({
 // index.js
 var index_exports = {};
 __export(index_exports, {
+  AkFetchError: () => AkFetchError,
+  ConfigurationError: () => ConfigurationError,
+  MemoryError: () => MemoryError,
+  NetworkError: () => NetworkError,
+  RateLimitError: () => RateLimitError,
+  RetryError: () => RetryError,
+  SSLError: () => SSLError,
+  TimeoutError: () => TimeoutError,
+  ValidationError: () => ValidationError,
   default: () => index_default
 });
 module.exports = __toCommonJS(index_exports);
@@ -3951,3 +4016,15 @@ var init_index = __esm({
   }
 });
 init_index();
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  AkFetchError,
+  ConfigurationError,
+  MemoryError,
+  NetworkError,
+  RateLimitError,
+  RetryError,
+  SSLError,
+  TimeoutError,
+  ValidationError
+});

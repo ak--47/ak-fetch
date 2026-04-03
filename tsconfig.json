@@ -5,6 +5,8 @@
     "moduleResolution": "Node",
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
+    "allowJs": true,
+    "checkJs": true,
     "strict": false,
     "noImplicitAny": false,
     "skipLibCheck": true,
@@ -17,14 +19,18 @@
     "noUnusedParameters": false
   },
   "include": [
-    "*.ts",
-    "*.js",
-    "types.d.ts"
+    "index.js",
+    "cli.js",
+    "lib/**/*.js",
+    "types.d.ts",
+    "*.ts"
   ],
   "exclude": [
     "node_modules",
     "dist",
     "test",
-    "benchmarks"
+    "benchmarks",
+    "scratch.*",
+    "test-consumer-usage.ts"
   ]
 }

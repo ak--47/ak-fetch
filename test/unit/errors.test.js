@@ -318,6 +318,113 @@ describe('Error Classes', () => {
         });
     });
 
+    describe('Subclass toJSON serialization', () => {
+        test('should serialize TimeoutError subclass fields', () => {
+            const error = new TimeoutError('Timed out', { timeout: 5000, url: 'https://example.com' });
+            const parsed = JSON.parse(JSON.stringify(error));
+            expect(parsed.timeout).toBe(5000);
+            expect(parsed.type).toBe('TIMEOUT_ERROR');
+            expect(parsed.url).toBe('https://example.com');
+        });
+
+        test('should serialize RetryError subclass fields including lastError', () => {
+            const lastError = new NetworkError('Connection refused', { code: 'ECONNREFUSED', statusCode: 503 });
+            const error = new RetryError('All retries failed', {
+                maxRetries: 3,
+                lastError,
+                url: 'https://example.com'
+            });
+            const parsed = JSON.parse(JSON.stringify(error));
+            expect(parsed.maxRetries).toBe(3);
+            expect(parsed.lastError).toBeDefined();
+            expect(parsed.lastError.message).toBe('Connection refused');
+            expect(parsed.lastError.code).toBe('ECONNREFUSED');
+            expect(parsed.type).toBe('RETRY_ERROR');
+        });
+
+        test('should serialize ValidationError subclass fields', () => {
+            const error = new ValidationError('Invalid input', { field: 'email', value: 'bad' });
+            const parsed = JSON.parse(JSON.stringify(error));
+            expect(parsed.field).toBe('email');
+            expect(parsed.value).toBe('bad');
+            expect(parsed.type).toBe('VALIDATION_ERROR');
+        });
+
+        test('should serialize RateLimitError subclass fields', () => {
+            const error = new RateLimitError('Rate limited', { retryAfter: 60, limit: 100, remaining: 0 });
+            const parsed = JSON.parse(JSON.stringify(error));
+            expect(parsed.retryAfter).toBe(60);
+            expect(parsed.limit).toBe(100);
+            expect(parsed.remaining).toBe(0);
+            expect(parsed.type).toBe('RATE_LIMIT_ERROR');
+        });
+
+        test('should serialize ConfigurationError subclass fields', () => {
+            const error = new ConfigurationError('Bad config', { parameter: 'batchSize' });
+            const parsed = JSON.parse(JSON.stringify(error));
+            expect(parsed.parameter).toBe('batchSize');
+            expect(parsed.type).toBe('CONFIGURATION_ERROR');
+        });
+
+        test('should serialize SSLError subclass fields', () => {
+            const error = new SSLError('SSL failed', { certificate: 'cert-info' });
+            const parsed = JSON.parse(JSON.stringify(error));
+            expect(parsed.certificate).toBe('cert-info');
+            expect(parsed.type).toBe('SSL_ERROR');
+        });
+
+        test('should serialize MemoryError subclass fields', () => {
+            const error = new MemoryError('OOM', { memoryUsage: { heapUsed: 1000000 }, limit: 500000 });
+            const parsed = JSON.parse(JSON.stringify(error));
+            expect(parsed.memoryUsage).toEqual({ heapUsed: 1000000 });
+            expect(parsed.limit).toBe(500000);
+            expect(parsed.type).toBe('MEMORY_ERROR');
+        });
+    });
+
+    describe('RetryError statusCode/body copy-up', () => {
+        test('should surface statusCode and body from lastError', () => {
+            const lastError = new AkFetchError('HTTP 503', {
+                statusCode: 503,
+                body: { error: 'Service Unavailable' }
+            });
+            const error = new RetryError('All retries failed', {
+                maxRetries: 3,
+                lastError
+            });
+            expect(error.statusCode).toBe(503);
+            expect(error.body).toEqual({ error: 'Service Unavailable' });
+        });
+
+        test('should prefer explicit statusCode over lastError', () => {
+            const lastError = new AkFetchError('HTTP 503', { statusCode: 503, body: 'server error' });
+            const error = new RetryError('All retries failed', {
+                maxRetries: 3,
+                lastError,
+                statusCode: 500,
+                body: 'explicit body'
+            });
+            expect(error.statusCode).toBe(500);
+            expect(error.body).toBe('explicit body');
+        });
+
+        test('should handle lastError without statusCode', () => {
+            const lastError = new Error('Generic failure');
+            const error = new RetryError('All retries failed', {
+                maxRetries: 3,
+                lastError
+            });
+            expect(error.statusCode).toBeUndefined();
+            expect(error.body).toBeUndefined();
+        });
+
+        test('should handle no lastError', () => {
+            const error = new RetryError('All retries failed', { maxRetries: 3 });
+            expect(error.statusCode).toBeUndefined();
+            expect(error.body).toBeUndefined();
+        });
+    });
+
     describe('Stack trace', () => {
         test('should capture stack trace correctly', () => {
             const error = new AkFetchError('Test error');

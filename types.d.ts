@@ -174,7 +174,7 @@ interface BatchRequestConfig {
    * @param data - Optional data context
    * @returns void or Promise<void>
    */
-  errorHandler?: (error: any, data?: any) => void | Promise<void>;
+  errorHandler?: (error: AkFetchError, data?: any) => void | Promise<void>;
 
   /**
    * Function called with each successful response
@@ -187,7 +187,7 @@ interface BatchRequestConfig {
    * @param attempt - Current attempt number (0-indexed)
    * @returns boolean or Promise<boolean> indicating whether to retry
    */
-  retryHandler?: (error: any, attempt: number) => boolean | Promise<boolean>;
+  retryHandler?: (error: AkFetchError, attempt: number) => boolean | Promise<boolean>;
 
   /**
    * Post-processing hook for array configurations
@@ -338,6 +338,77 @@ interface Result {
 }
 
 /**
+ * Options for constructing AkFetchError instances
+ */
+interface AkFetchErrorOptions {
+  code?: string;
+  statusCode?: number;
+  url?: string;
+  method?: string;
+  body?: any;
+  headers?: Record<string, string>;
+  retryCount?: number;
+}
+
+declare class AkFetchError extends Error {
+  constructor(message: string, options?: AkFetchErrorOptions);
+  name: string;
+  code?: string;
+  statusCode?: number;
+  url?: string;
+  method?: string;
+  body?: any;
+  headers?: Record<string, string>;
+  retryCount: number;
+  timestamp: string;
+  toJSON(): Record<string, any>;
+}
+
+declare class NetworkError extends AkFetchError {
+  type: 'NETWORK_ERROR';
+}
+
+declare class TimeoutError extends AkFetchError {
+  type: 'TIMEOUT_ERROR';
+  timeout?: number;
+}
+
+declare class RetryError extends AkFetchError {
+  type: 'RETRY_ERROR';
+  maxRetries?: number;
+  lastError?: AkFetchError;
+}
+
+declare class ValidationError extends AkFetchError {
+  type: 'VALIDATION_ERROR';
+  field?: string;
+  value?: any;
+}
+
+declare class RateLimitError extends AkFetchError {
+  type: 'RATE_LIMIT_ERROR';
+  retryAfter?: number;
+  limit?: number;
+  remaining?: number;
+}
+
+declare class ConfigurationError extends AkFetchError {
+  type: 'CONFIGURATION_ERROR';
+  parameter?: string;
+}
+
+declare class SSLError extends AkFetchError {
+  type: 'SSL_ERROR';
+  certificate?: any;
+}
+
+declare class MemoryError extends AkFetchError {
+  type: 'MEMORY_ERROR';
+  memoryUsage?: any;
+  limit?: number;
+}
+
+/**
  * Main ak-fetch function that processes HTTP requests with batching, retry logic, and streaming
  * 
  * @param config - Single configuration object or array of configurations
@@ -367,4 +438,10 @@ declare function akFetch(config: BatchRequestConfig[]): Promise<Result>;
 export default akFetch;
 
 // Named exports for convenience  
-export { BatchRequestConfig, Result, HttpResponse };
+export {
+  BatchRequestConfig, Result, HttpResponse,
+  AkFetchError, AkFetchErrorOptions,
+  NetworkError, TimeoutError, RetryError,
+  ValidationError, RateLimitError, ConfigurationError,
+  SSLError, MemoryError
+};

@@ -22,13 +22,16 @@ import CircularBuffer from './lib/circular-buffer.js';
 import StreamProcessors from './lib/stream-processors.js';
 import { createLogger } from './lib/logger.js';
 import { getPresetTransform, applyPresetTransform } from './lib/presets.js';
-import { 
-    AkFetchError, 
-    NetworkError, 
-    TimeoutError, 
+import {
+    AkFetchError,
+    NetworkError,
+    TimeoutError,
+    RetryError,
     ValidationError,
+    RateLimitError,
     ConfigurationError,
-    MemoryError 
+    SSLError,
+    MemoryError
 } from './lib/errors.js';
 
 
@@ -1651,3 +1654,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 }
 
 export default main;
+export {
+    AkFetchError,
+    NetworkError,
+    TimeoutError,
+    RetryError,
+    ValidationError,
+    RateLimitError,
+    ConfigurationError,
+    SSLError,
+    MemoryError
+};
