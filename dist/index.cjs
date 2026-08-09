@@ -1853,13 +1853,14 @@ var init_cookie_jar = __esm({
 });
 
 // lib/form-data-handler.js
-var import_fs2, import_promises, import_path, FormDataHandler, form_data_handler_default;
+var import_node_fs, import_promises, import_path, statSync, existsSync, openAsBlob, FormDataHandler, form_data_handler_default;
 var init_form_data_handler = __esm({
   "lib/form-data-handler.js"() {
-    import_fs2 = require("fs");
+    import_node_fs = __toESM(require("node:fs"), 1);
     import_promises = require("fs/promises");
     import_path = require("path");
     init_errors();
+    ({ statSync, existsSync, openAsBlob } = import_node_fs.default);
     FormDataHandler = class {
       constructor(options = {}) {
         this.maxFileSize = options.maxFileSize || 100 * 1024 * 1024;
@@ -1918,13 +1919,13 @@ var init_form_data_handler = __esm({
         return new Blob([content], { type });
       }
       async appendFilePath(form, key, filePath) {
-        const stats = (0, import_fs2.statSync)(filePath);
+        const stats = statSync(filePath);
         if (!stats.isFile()) throw new ValidationError(`Path is not a file: ${filePath}`, { field: key, value: filePath });
         if (stats.size > this.maxFileSize) {
           throw new ValidationError(`File too large: ${filePath} (${stats.size} bytes, max: ${this.maxFileSize})`, { field: key, value: filePath });
         }
         const type = this.getMimeType(filePath);
-        const blob = typeof import_fs2.openAsBlob === "function" ? await (0, import_fs2.openAsBlob)(filePath, { type }) : new Blob([await (0, import_promises.readFile)(filePath)], { type });
+        const blob = typeof openAsBlob === "function" ? await openAsBlob(filePath, { type }) : new Blob([await (0, import_promises.readFile)(filePath)], { type });
         form.append(key, blob, (0, import_path.basename)(filePath));
       }
       isFileObject(value) {
@@ -1933,7 +1934,7 @@ var init_form_data_handler = __esm({
       }
       isFilePath(value) {
         if (typeof value !== "string") return false;
-        return (value.includes("/") || value.includes("\\")) && !value.includes("\n") && (0, import_fs2.existsSync)(value);
+        return (value.includes("/") || value.includes("\\")) && !value.includes("\n") && existsSync(value);
       }
       getMimeType(filePath) {
         const ext = filePath.toLowerCase().split(".").pop();
@@ -2635,11 +2636,11 @@ var init_circular_buffer = __esm({
 });
 
 // lib/stream-processors.js
-var import_stream, import_fs3, import_promises2, StreamProcessors, stream_processors_default;
+var import_stream, import_fs2, import_promises2, StreamProcessors, stream_processors_default;
 var init_stream_processors = __esm({
   "lib/stream-processors.js"() {
     import_stream = require("stream");
-    import_fs3 = require("fs");
+    import_fs2 = require("fs");
     import_promises2 = require("stream/promises");
     init_errors();
     StreamProcessors = class {
@@ -2899,7 +2900,7 @@ var init_stream_processors = __esm({
        * @returns {Promise<string>} File path when complete
        */
       async streamToFile(dataStream, filePath, format = "json", options = {}) {
-        const writeStream = (0, import_fs3.createWriteStream)(filePath, { encoding: "utf8" });
+        const writeStream = (0, import_fs2.createWriteStream)(filePath, { encoding: "utf8" });
         try {
           switch (format.toLowerCase()) {
             case "json":
@@ -3450,14 +3451,14 @@ async function createDataStream(config) {
     return data.readableObjectMode ? data : data.pipe(streamProcessors.createJSONLTransform());
   }
   if (typeof data === "string") {
-    if ((0, import_fs4.existsSync)(import_path2.default.resolve(data))) {
+    if ((0, import_fs3.existsSync)(import_path2.default.resolve(data))) {
       const filePath = import_path2.default.resolve(data);
       const fileExt = import_path2.default.extname(filePath).toLowerCase();
       if (fileExt === ".json") {
-        const jsonData = JSON.parse((0, import_fs4.readFileSync)(filePath, "utf8"));
+        const jsonData = JSON.parse((0, import_fs3.readFileSync)(filePath, "utf8"));
         return import_stream2.Readable.from(Array.isArray(jsonData) ? jsonData : [jsonData]);
       } else {
-        return (0, import_fs4.createReadStream)(filePath, { highWaterMark }).pipe(streamProcessors.createJSONLTransform());
+        return (0, import_fs3.createReadStream)(filePath, { highWaterMark }).pipe(streamProcessors.createJSONLTransform());
       }
     } else if ((0, import_ak_tools3.isJSONStr)(data)) {
       const parsed = JSON.parse(data);
@@ -3851,7 +3852,7 @@ function prettyTime(milliseconds) {
   }
   return result.trim() || "0 seconds";
 }
-var import_ak_tools3, import_child_process, import_stream2, import_path2, import_fs4, import_dotenv, import_meta2, index_default;
+var import_ak_tools3, import_child_process, import_stream2, import_path2, import_fs3, import_dotenv, import_meta2, index_default;
 var init_index = __esm({
   "index.js"() {
     init_concurrency();
@@ -3860,7 +3861,7 @@ var init_index = __esm({
     import_child_process = require("child_process");
     import_stream2 = require("stream");
     import_path2 = __toESM(require("path"), 1);
-    import_fs4 = require("fs");
+    import_fs3 = require("fs");
     import_dotenv = require("dotenv");
     init_http_client();
     init_circular_buffer();
