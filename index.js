@@ -1078,6 +1078,8 @@ async function processDataStream(stream, config, logger) {
             try {
                 const requestConfig = {
                     ...config,
+                    transform: undefined,   // already applied per-record in the stream loop (finding A1)
+                    clone: false,           // already cloned pre-transform when requested
                     data: batchData.length === 0 ? undefined : (batchData.length === 1 ? batchData[0] : batchData)
                 };
 
