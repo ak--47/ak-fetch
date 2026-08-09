@@ -6,7 +6,7 @@
  * 2025 production-ready version with advanced features
  */
 
-import RunQueue from "run-queue";
+import { TaskPool } from './lib/concurrency.js';
 import { json, isJSONStr, comma, makeExist } from "ak-tools";
 import cli from './cli.js';
 import { execSync } from 'child_process';
@@ -296,7 +296,7 @@ async function processMultipleConfigs(configs) {
         delay: delay ? `${delay}ms` : 'none'
     });
 
-    const queue = new RunQueue({ maxConcurrency: concurrency });
+    const pool = new TaskPool(concurrency);
 	/** @type {Result[]} */
     const results = [];
     let reqCount = 0;
@@ -304,35 +304,23 @@ async function processMultipleConfigs(configs) {
     const totalCount = configs.length;
 
     for (const config of configs) {
-        queue.add(0, async () => {
-            if (delay > 0) {
-                await new Promise(resolve => setTimeout(resolve, delay));
-            }
-
+        await pool.submit(async () => {
+            if (delay > 0) await new Promise(resolve => setTimeout(resolve, delay));
             try {
                 reqCount++;
                 const result = await processSingleConfig(config, false);
-                
-                if (Array.isArray(result)) {
-                    results.push(...result);
-                } else {
-                    results.push(result);
-                }
-
+                if (Array.isArray(result)) results.push(...result);
+                else results.push(result);
                 logger.progress(reqCount, totalCount);
             } catch (error) {
                 errorCount++;
-                // @ts-ignore
                 logger.error(`Config ${reqCount} failed:`, error.message);
-                // @ts-ignore
                 results.push({ error: error.message, config: sanitizeConfig(config) });
-                
                 logger.progress(reqCount, totalCount);
             }
         });
     }
-
-    await queue.run();
+    await pool.drain();
 
     const endTime = Date.now();
     const duration = endTime - startTime;
@@ -918,11 +906,12 @@ async function processDataStream(stream, config, logger) {
         forceGC = false
     } = config;
 
-    let queue = new RunQueue({ maxConcurrency: concurrency });
-    const responseBuffer = storeResponses ? new CircularBuffer(maxResponseBuffer) : null;
+    const effectiveBatchSize = batchSize === 0 ? Infinity : batchSize;   // finding B7
+    const pool = new TaskPool(concurrency, maxTasks);
+    const responseBuffer = storeResponses && maxResponseBuffer > 0 ? new CircularBuffer(maxResponseBuffer) : null;
     const streamProcessors = new StreamProcessors({ maxMemoryUsage });
-    
-    // Create type-safe http client config with defaults
+
+    // Type-safe http client config — same shape as today, retries via Task 2's resolver
     const httpClientConfig = {
         timeout: config.timeout ?? 60000,
         enableConnectionPooling: config.enableConnectionPooling ?? true,
@@ -935,50 +924,38 @@ async function processDataStream(stream, config, logger) {
         useStaticRetryDelay: config.useStaticRetryDelay ?? false,
         enableCookies: config.enableCookies ?? false,
         maxFileSize: config.maxFileSize ?? undefined,
-        // Required properties for BatchRequestConfig compatibility
         url: config.url,
         data: config.data,
         method: config.method ?? 'POST',
         headers: config.headers ?? {}
     };
-    
     const httpClient = createHttpClient(httpClientConfig);
 
     let reqCount = 0;
     let rowCount = 0;
     let errorCount = 0;
     let batch = [];
-    let isStreamPaused = false;
 
-    // Add memory monitoring if specified
     if (maxMemoryUsage) {
         stream = stream.pipe(streamProcessors.createMemoryMonitorTransform());
     }
 
-    stream.on('error', error => {
-        logger.error('Stream error:', error.message);
-    });
+    stream.on('error', error => logger.error('Stream error:', error.message));
 
-    stream.on('end', () => {
-        if (logger.isVerbose()) {
-            logger.info(`Stream ended: processed ${comma(rowCount)} records, ${comma(reqCount)} requests`);
-        }
-    });
+    const isGetRequest = ['GET', 'HEAD', 'OPTIONS'].includes((config.method || 'POST').toUpperCase());
 
-    // Process stream data
     for await (const data of stream) {
-        const isGetRequest = ['GET', 'HEAD', 'OPTIONS'].includes((config.method || 'POST').toUpperCase());
         const isEmptyGetData = isGetRequest && typeof data === 'object' && data !== null && Object.keys(data).length === 0;
-        
-        if (data !== null && !isEmptyGetData) {  // Skip null data and empty objects for GET requests
+
+        if (data !== null && !isEmptyGetData) {
             let processedData = data;
-            
+
             // Clone data if requested to avoid mutations (do this before any transforms)
             if (config.clone) {
-                processedData = typeof data === 'object' && data !== null ? 
+                processedData = typeof data === 'object' && data !== null ?
                     JSON.parse(JSON.stringify(data)) : data;
             }
-            
+
             // Apply preset transform first (if specified)
             if (config.preset) {
                 try {
@@ -992,14 +969,14 @@ async function processDataStream(stream, config, logger) {
                     }
                 }
             }
-            
+
             // Apply user transform function (if provided) - runs AFTER preset transform
             if (typeof config.transform === 'function') {
                 try {
                     const transformed = config.transform(processedData);
                     if (transformed !== undefined) {
                         processedData = transformed;
-                        
+
                         // When not cloning, also update the original data object (but only for objects, not arrays)
                         if (!config.clone && typeof data === 'object' && data !== null && !Array.isArray(data) && typeof transformed === 'object' && !Array.isArray(transformed)) {
                             Object.assign(data, transformed);
@@ -1014,119 +991,63 @@ async function processDataStream(stream, config, logger) {
                     }
                 }
             }
-            
+
             batch.push(processedData);
             rowCount++;
         }
 
-        // Process batch when it reaches batchSize or handle GET requests
-        if (batch.length >= batchSize || (data === null && batch.length > 0) || (isEmptyGetData && batch.length === 0)) {
-            if (isEmptyGetData && batch.length === 0) {
-                // For GET requests with no data, create a single empty batch to trigger the request
-                addBatchToQueue([]);
-            } else {
-                addBatchToQueue(batch);
-                batch = [];
-            }
+        if (isEmptyGetData && batch.length === 0) {
+            await submitBatch([]);                       // GET with no data: one empty-batch request
+        } else if (batch.length >= effectiveBatchSize) {
+            await submitBatch(batch);
+            batch = [];
         }
-
-        // Pause stream if queue is full
-        if (queue.queued >= maxTasks && !isStreamPaused) {
-            // Suppressed: Pausing stream message to avoid jittery output
-            stream.pause();
-            isStreamPaused = true;
-            
-            await queue.run();
-            queue = new RunQueue({ maxConcurrency: concurrency });
-            
-            // Suppressed: Resuming stream message to avoid jittery output
-            stream.resume();
-            isStreamPaused = false;
-        }
+        // no stream.pause()/resume(): pool.submit() awaiting IS the backpressure under for-await
     }
 
-    // Process any remaining batch
     if (batch.length > 0) {
-        addBatchToQueue(batch);
+        await submitBatch(batch);
     }
 
-    // Wait for all requests to complete
-    if (queue.queued > 0) {
-        await queue.run();
-    }
-    
-    // Cleanup
+    await pool.drain();
     cleanup();
     httpClient.destroy();
 
     const responses = responseBuffer ? responseBuffer.toArray() : [];
-    
-    // Force garbage collection if enabled
-    if (forceGC && global.gc) {
-        global.gc();
-    }
+    if (forceGC && global.gc) global.gc();
 
     return [responses, reqCount, rowCount, errorCount];
-    /**
-     * @param  {Array<any>} currentBatch
-     */
-    function addBatchToQueue(currentBatch) {
-        const batchData = currentBatch.slice(); // Create copy
-        
-        queue.add(0, async () => {
+
+    async function submitBatch(currentBatch) {
+        const batchData = currentBatch.slice();
+        await pool.submit(async () => {
             try {
                 const requestConfig = {
                     ...config,
-                    transform: undefined,   // already applied per-record in the stream loop (finding A1)
-                    clone: false,           // already cloned pre-transform when requested
+                    transform: undefined,   // Task 3 invariant (finding A1)
+                    clone: false,
                     data: batchData.length === 0 ? undefined : (batchData.length === 1 ? batchData[0] : batchData)
                 };
-
                 const response = await httpClient.request(requestConfig);
-                
-                if (responseBuffer) {
-                    responseBuffer.push(response);
-                }
-
+                if (responseBuffer) responseBuffer.push(response);
                 reqCount++;
-
-                if (delay > 0) {
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                }
-
-                // Update progress
-                logger.progress(reqCount, Math.ceil(rowCount / (batchSize || 1)), rowCount);
-
-                // Handle response callback
+                if (delay > 0) await new Promise(resolve => setTimeout(resolve, delay));
+                logger.progress(reqCount, Math.ceil(rowCount / (effectiveBatchSize === Infinity ? rowCount || 1 : effectiveBatchSize)), rowCount);
                 if (config.responseHandler && typeof config.responseHandler === 'function') {
                     config.responseHandler(response);
                 }
-
             } catch (error) {
                 errorCount++;
-                // @ts-ignore
                 logger.error('Batch processing failed:', error.message);
-
                 await invokeErrorHandler(config.errorHandler, error);
-                if (!config.errorHandler) {
-                    // Store error in response buffer if enabled
-                    if (responseBuffer) {
-                        // Include full error details including response body
-                        const errorDetails = {
-                            error: error.message,
-                            batch: batchData
-                        };
-                        
-                        // Add optional error properties if they exist
-                        if (error.statusCode) errorDetails.statusCode = error.statusCode;
-                        if (error.body) errorDetails.body = error.body;
-                        if (error.url) errorDetails.url = error.url;
-                        if (error.method) errorDetails.method = error.method;
-                        if (error.timestamp) errorDetails.timestamp = error.timestamp;
-                        
-                        // @ts-ignore
-                        responseBuffer.push(errorDetails);
-                    }
+                if (!config.errorHandler && responseBuffer) {
+                    const errorDetails = { error: error.message, batch: batchData };
+                    if (error.statusCode) errorDetails.statusCode = error.statusCode;
+                    if (error.body) errorDetails.body = error.body;
+                    if (error.url) errorDetails.url = error.url;
+                    if (error.method) errorDetails.method = error.method;
+                    if (error.timestamp) errorDetails.timestamp = error.timestamp;
+                    responseBuffer.push(errorDetails);
                 }
             }
         });
