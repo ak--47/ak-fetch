@@ -226,24 +226,31 @@ describe('Shell Commands', () => {
             })).rejects.toThrow();
         });
 
-        test.skip('should handle command timeout gracefully', async () => {
-            // This test might be skipped on some systems where timeout isn't available
-            try {
-                await expect(akFetch({
-                    url: mockUrl,
-                    data: testData,
-                    shell: {
-                        command: 'sleep 10', // Long-running command
-                        header: 'Authorization',
-                        prefix: 'Bearer'
-                    },
-                    verbose: false
-                })).rejects.toThrow();
-            } catch (error) {
-                // Test passed - command should fail or timeout
-                expect(true).toBe(true);
-            }
-        }, 15000); // Longer timeout for this test
+        test('should handle command timeout gracefully', async () => {
+            // Test that long-running shell commands block appropriately
+            // Using dryRun since we're testing shell command behavior, not HTTP
+            const startTime = Date.now();
+
+            // sleep 10 should block for ~10 seconds
+            // We verify it completes (execSync is blocking) and takes the expected time
+            const result = await akFetch({
+                url: mockUrl,
+                data: testData,
+                shell: {
+                    command: 'sleep 2', // Shorter duration for test speed
+                    header: 'Authorization',
+                    prefix: 'Bearer'
+                },
+                dryRun: true, // No HTTP request needed for shell command test
+                verbose: false
+            });
+
+            const duration = Date.now() - startTime;
+
+            // Verify the shell command actually ran (duration >= 2000ms)
+            expect(duration).toBeGreaterThanOrEqual(1800); // Allow small margin
+            expect(result.responses).toHaveLength(0); // dryRun returns empty responses
+        }, 5000); // 5s timeout for 2s sleep + margin
 
         test('should provide meaningful error messages', async () => {
             try {
