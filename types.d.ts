@@ -21,7 +21,7 @@ interface BatchRequestConfig {
   data?: object[] | string | Readable;
 
   /**
-   * Number of records per HTTP request (use 0 to disable batching)
+   * Number of records per HTTP request (0 = send all records in one request)
    * @default 1
    * @example 100
    */
@@ -88,7 +88,7 @@ interface BatchRequestConfig {
   logFile?: string;
 
   /**
-   * Number of retry attempts for failed requests (`null` for fire-and-forget)
+   * Number of retry attempts for failed requests (0 = no retries, null = fire-and-forget no retries)
    * @default 3
    * @example 5
    * @example null

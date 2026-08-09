@@ -183,7 +183,7 @@ npx ak-fetch ./events.jsonl \
 | `url` | `string` | **required** | Target API endpoint |
 | `data` | `Array\|string\|Stream` | **required** | Data to send (array, file path, or stream) |
 | `method` | `string` | `'POST'` | HTTP method (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS) |
-| `batchSize` | `number` | `1` | Records per HTTP request (0 disables batching) |
+| `batchSize` | `number` | `1` | Records per HTTP request (0 = send all records in one request) |
 | `concurrency` | `number` | `10` | Maximum concurrent requests |
 | `headers` | `Object` | `{}` | Custom HTTP headers |
 
@@ -203,7 +203,7 @@ npx ak-fetch ./events.jsonl \
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `retries` | `number\|null` | `3` | Max retry attempts (null = fire-and-forget) |
+| `retries` | `number\|null` | `3` | Max retry attempts (0 = no retries, null = fire-and-forget no retries) |
 | `retryDelay` | `number` | `1000` | Base retry delay in milliseconds |
 | `retryOn` | `number[]` | `[408,429,500,502,503,504,520,521,522,523,524]` | HTTP status codes to retry |
 | `useStaticRetryDelay` | `boolean` | `false` | Use fixed delays vs exponential backoff |
@@ -213,7 +213,7 @@ npx ak-fetch ./events.jsonl \
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `verbose` | `boolean` | `true` | Enable progress display and logging |
+| `verbose` | `boolean` | `false` | Enable progress display and logging |
 | `logFile` | `string` | `undefined` | Save responses to file |
 | `format` | `string` | `'json'` | Output format (json, csv, ndjson) |
 | `responseHeaders` | `boolean` | `false` | Include response headers in output |
@@ -305,13 +305,14 @@ For maximum performance when you don't need response data:
 const result = await akFetch({
     url: 'https://api.example.com/events',
     data: largeDataset,
-    retries: null,              // Fire-and-forget mode
+    retries: null,              // Fire-and-forget: single attempt, no retries
     batchSize: 1000,
     concurrency: 50
 });
 
 // result.responses will be empty array []
 // Only metadata (reqCount, duration, etc.) is returned
+// Requests are sent once with no retry logic
 ```
 
 ### Vendor Presets for Easy API Integration

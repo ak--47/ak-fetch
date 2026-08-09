@@ -30,18 +30,68 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
+// lib/concurrency.js
+var TaskPool;
+var init_concurrency = __esm({
+  "lib/concurrency.js"() {
+    TaskPool = class {
+      /**
+       * @param {number} concurrency - max tasks running at once
+       * @param {number} [maxPending=Infinity] - max accepted-but-unfinished tasks
+       *   before submit() blocks (stream backpressure high-water mark)
+       */
+      constructor(concurrency, maxPending = Infinity) {
+        this.concurrency = concurrency;
+        this.maxPending = maxPending;
+        this.active = 0;
+        this.waiters = [];
+        this.pending = /* @__PURE__ */ new Set();
+      }
+      async submit(fn) {
+        while (this.pending.size >= this.maxPending) {
+          await Promise.race(this.pending);
+        }
+        const task = this.#run(fn);
+        const tracked = task.catch(() => {
+        }).finally(() => this.pending.delete(tracked));
+        this.pending.add(tracked);
+        return task;
+      }
+      async #run(fn) {
+        if (this.active >= this.concurrency) {
+          await new Promise((resolve) => this.waiters.push(resolve));
+        }
+        this.active++;
+        try {
+          return await fn();
+        } finally {
+          this.active--;
+          const next = this.waiters.shift();
+          if (next) next();
+        }
+      }
+      async drain() {
+        while (this.pending.size > 0) {
+          await Promise.allSettled([...this.pending]);
+        }
+      }
+    };
+  }
+});
+
 // lib/logger.js
 function createLogger(options = {}) {
   return new AkLogger(options);
 }
-var import_readline, import_ak_tools, AkLogger;
+var import_node_readline, import_ak_tools, AkLogger;
 var init_logger = __esm({
   "lib/logger.js"() {
-    import_readline = __toESM(require("readline"), 1);
+    import_node_readline = __toESM(require("node:readline"), 1);
     import_ak_tools = require("ak-tools");
     AkLogger = class _AkLogger {
       constructor(options = {}) {
         this.verbose = options.verbose !== false;
+        this.isTTY = options.isTTY ?? Boolean(process.stdout.isTTY);
         this.startTime = null;
         this.lastProgressUpdate = 0;
         this.progressUpdateInterval = options.progressUpdateInterval || 250;
@@ -200,15 +250,15 @@ ${this.logPrefix} ${message}`);
        * @since 2.0.0
        */
       progress(completed, total = 0, records = 0, options = {}) {
-        if (!this.verbose) return;
+        if (!this.verbose || !this.isTTY) return;
         const now = Date.now();
         if (now - this.lastProgressUpdate < this.progressUpdateInterval) {
           return;
         }
         this.lastProgressUpdate = now;
         this.progressActive = true;
-        import_readline.default.cursorTo(process.stdout, 0);
-        import_readline.default.clearLine(process.stdout, 0);
+        import_node_readline.default.cursorTo(process.stdout, 0);
+        import_node_readline.default.clearLine(process.stdout, 0);
         const percent = total > 0 ? Math.floor(completed / total * 100) : 0;
         const progressBar = this.createProgressBar(percent);
         let message = `${progressBar} ${percent}%`;
@@ -278,8 +328,10 @@ ${this.logPrefix} ${message}`);
        */
       complete(results = {}) {
         if (!this.verbose) return;
-        import_readline.default.cursorTo(process.stdout, 0);
-        import_readline.default.clearLine(process.stdout, 0);
+        if (this.isTTY) {
+          import_node_readline.default.cursorTo(process.stdout, 0);
+          import_node_readline.default.clearLine(process.stdout, 0);
+        }
         const {
           reqCount = 0,
           rowCount = 0,
@@ -388,8 +440,10 @@ ${this.logPrefix} ${message}`);
       info(...args) {
         if (!this.verbose) return;
         if (this.progressActive) {
-          import_readline.default.cursorTo(process.stdout, 0);
-          import_readline.default.clearLine(process.stdout, 0);
+          if (this.isTTY) {
+            import_node_readline.default.cursorTo(process.stdout, 0);
+            import_node_readline.default.clearLine(process.stdout, 0);
+          }
           this.originalLog("\u2139\uFE0F", ...args);
           this.progressActive = false;
         } else {
@@ -620,6 +674,7 @@ ${this.logPrefix} ${message}`);
       child(options = {}) {
         return new _AkLogger({
           verbose: this.verbose,
+          isTTY: this.isTTY,
           showThroughput: this.showThroughput,
           showMemory: this.showMemory,
           progressBarWidth: this.progressBarWidth,
@@ -673,7 +728,7 @@ DOCS: https://github.com/ak--47/ak-fetch`).command("$0", "bulk fetch calls", () 
     demandOption: false,
     describe: "Records per HTTP request (0 disables batching)",
     type: "number",
-    default: 2
+    default: 1
   }).option("concurrency", {
     demandOption: false,
     describe: "Maximum concurrent requests",
@@ -939,8 +994,7 @@ function parse(val, defaultVal = void 0) {
       try {
         if (typeof val === "string") val = JSON.parse(val?.replace(/'/g, '"'));
       } catch (secondError) {
-        if (this.verbose) console.log(`error parsing tags: ${val}
-tags must be valid JSON`);
+        console.warn(`could not parse ${val} as JSON; using default`);
         val = defaultVal;
       }
     }
@@ -956,7 +1010,7 @@ var init_cli = __esm({
     import_ak_tools2 = __toESM(require("ak-tools"), 1);
     init_logger();
     import_meta = {};
-    packageJson = JSON.parse((0, import_fs.readFileSync)("./package.json", "utf8"));
+    packageJson = JSON.parse((0, import_fs.readFileSync)(new URL("./package.json", import_meta.url), "utf8"));
     ({ version } = packageJson);
     hero = String.raw`
 ░▒▓██████▓▒░░▒▓█▓▒░░▒▓█▓▒░      ░▒▓████████▓▒░▒▓████████▓▒░▒▓████████▓▒░▒▓██████▓▒░░▒▓█▓▒░░▒▓█▓▒░ 
@@ -1178,16 +1232,16 @@ var init_retry_strategy = __esm({
        * @since 2.0.0
        */
       constructor(options = {}) {
-        this.maxRetries = options.maxRetries || 3;
-        this.baseDelay = options.baseDelay || 1e3;
-        this.maxDelay = options.maxDelay || 3e4;
-        this.exponentialBase = options.exponentialBase || 2;
-        this.jitterFactor = options.jitterFactor || 0.1;
+        this.maxRetries = options.maxRetries ?? 3;
+        this.baseDelay = options.baseDelay ?? 1e3;
+        this.maxDelay = options.maxDelay ?? 3e4;
+        this.exponentialBase = options.exponentialBase ?? 2;
+        this.jitterFactor = options.jitterFactor ?? 0.1;
         this.retryOn = options.retryOn || [408, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524];
         this.retryOnNetworkError = options.retryOnNetworkError !== false;
         this.retryHandler = options.retryHandler;
         this.useStaticDelay = options.useStaticDelay || false;
-        this.staticRetryDelay = options.staticRetryDelay || this.baseDelay;
+        this.staticRetryDelay = options.staticRetryDelay ?? this.baseDelay;
       }
       /**
        * Calculate delay for the next retry attempt
@@ -1350,7 +1404,7 @@ var init_retry_strategy = __esm({
             lastError = error;
             attempt++;
             if (attempt > this.maxRetries) {
-              throw new RetryError(`All ${this.maxRetries} retry attempts failed`, {
+              throw new RetryError(`All ${this.maxRetries} retry attempts failed: ${lastError?.message}`, {
                 maxRetries: this.maxRetries,
                 lastError,
                 url: context.url,
@@ -1367,7 +1421,7 @@ var init_retry_strategy = __esm({
             await this.delay(delay);
           }
         }
-        throw new RetryError(`All ${this.maxRetries} retry attempts failed`, {
+        throw new RetryError(`All ${this.maxRetries} retry attempts failed: ${lastError?.message}`, {
           maxRetries: this.maxRetries,
           lastError,
           url: context.url,
@@ -1768,151 +1822,88 @@ var init_cookie_jar = __esm({
 });
 
 // lib/form-data-handler.js
-var import_form_data, import_fs2, import_path, FormDataHandler, form_data_handler_default;
+var import_fs2, import_promises, import_path, FormDataHandler, form_data_handler_default;
 var init_form_data_handler = __esm({
   "lib/form-data-handler.js"() {
-    import_form_data = __toESM(require("form-data"), 1);
     import_fs2 = require("fs");
+    import_promises = require("fs/promises");
     import_path = require("path");
     init_errors();
     FormDataHandler = class {
       constructor(options = {}) {
         this.maxFileSize = options.maxFileSize || 100 * 1024 * 1024;
         this.allowedMimeTypes = options.allowedMimeTypes || null;
-        this.encoding = options.encoding || "utf8";
       }
       /**
-       * Create FormData from various input types
-       * @param {Object|Array|FormData} data - Data to convert to FormData
-       * @param {Object} options - Options for form data creation
-       * @returns {FormData} FormData instance
+       * @param {Object|Array|FormData} data
+       * @returns {Promise<FormData>} native FormData ready for fetch
        */
-      createFormData(data, options = {}) {
-        const form = new import_form_data.default();
-        if (data instanceof import_form_data.default) {
-          return data;
-        }
+      async createFormData(data) {
+        if (data instanceof FormData) return data;
+        const form = new FormData();
         if (Array.isArray(data)) {
-          data.forEach((item, index) => {
-            this.appendToForm(form, `item_${index}`, item);
-          });
+          for (let i = 0; i < data.length; i++) await this.appendToForm(form, `item_${i}`, data[i]);
         } else if (typeof data === "object" && data !== null) {
-          Object.entries(data).forEach(([key, value]) => {
-            this.appendToForm(form, key, value);
-          });
+          for (const [key, value] of Object.entries(data)) await this.appendToForm(form, key, value);
         } else {
           form.append("data", String(data));
         }
         return form;
       }
-      /**
-       * Append a value to FormData with proper handling
-       * @param {FormData} form - FormData instance
-       * @param {string} key - Field key
-       * @param {any} value - Value to append
-       */
-      appendToForm(form, key, value) {
+      async appendToForm(form, key, value) {
         if (value === null || value === void 0) {
           form.append(key, "");
           return;
         }
         if (this.isFileObject(value)) {
-          this.appendFile(form, key, value);
+          form.append(key, this.fileObjectToBlob(value), value.filename || value.name || "file");
           return;
         }
         if (typeof value === "string" && this.isFilePath(value)) {
-          this.appendFilePath(form, key, value);
+          await this.appendFilePath(form, key, value);
           return;
         }
         if (Array.isArray(value)) {
-          value.forEach((item, index) => {
-            this.appendToForm(form, `${key}[${index}]`, item);
-          });
+          for (let i = 0; i < value.length; i++) await this.appendToForm(form, `${key}[${i}]`, value[i]);
           return;
         }
         if (typeof value === "object") {
-          Object.entries(value).forEach(([nestedKey, nestedValue]) => {
-            this.appendToForm(form, `${key}[${nestedKey}]`, nestedValue);
-          });
+          for (const [nestedKey, nestedValue] of Object.entries(value)) {
+            await this.appendToForm(form, `${key}[${nestedKey}]`, nestedValue);
+          }
           return;
         }
         form.append(key, String(value));
       }
-      /**
-       * Append a file object to FormData
-       * @param {FormData} form - FormData instance
-       * @param {string} key - Field key
-       * @param {Object} fileObj - File object
-       */
-      appendFile(form, key, fileObj) {
-        const options = {
-          filename: fileObj.filename || fileObj.name || "file",
-          contentType: fileObj.contentType || fileObj.type || "application/octet-stream"
-        };
+      fileObjectToBlob(fileObj) {
+        const type = fileObj.contentType || fileObj.type || "application/octet-stream";
+        const content = fileObj.buffer ?? fileObj.data ?? fileObj.content;
+        if (content === void 0 && !fileObj.stream) {
+          throw new ValidationError("Invalid file object", { value: fileObj });
+        }
         if (fileObj.stream) {
-          form.append(key, fileObj.stream, options);
-        } else if (fileObj.buffer) {
-          form.append(key, fileObj.buffer, options);
-        } else if (fileObj.data) {
-          form.append(key, fileObj.data, options);
-        } else {
-          throw new ValidationError(`Invalid file object for key "${key}"`, { field: key, value: fileObj });
+          throw new ValidationError("Stream file objects are no longer supported; pass a file path, buffer, or data", { value: fileObj });
         }
+        return new Blob([content], { type });
       }
-      /**
-       * Append a file path to FormData
-       * @param {FormData} form - FormData instance
-       * @param {string} key - Field key
-       * @param {string} filePath - Path to file
-       */
-      appendFilePath(form, key, filePath) {
-        try {
-          const stats = (0, import_fs2.statSync)(filePath);
-          if (!stats.isFile()) {
-            throw new ValidationError(`Path is not a file: ${filePath}`, { field: key, value: filePath });
-          }
-          if (stats.size > this.maxFileSize) {
-            throw new ValidationError(`File too large: ${filePath} (${stats.size} bytes, max: ${this.maxFileSize})`, {
-              field: key,
-              value: filePath
-            });
-          }
-          const stream = (0, import_fs2.createReadStream)(filePath);
-          const filename = (0, import_path.basename)(filePath);
-          form.append(key, stream, {
-            filename,
-            contentType: this.getMimeType(filePath)
-          });
-        } catch (error) {
-          if (error instanceof ValidationError) {
-            throw error;
-          }
-          throw new ValidationError(`Failed to read file: ${filePath}`, { field: key, value: filePath });
+      async appendFilePath(form, key, filePath) {
+        const stats = (0, import_fs2.statSync)(filePath);
+        if (!stats.isFile()) throw new ValidationError(`Path is not a file: ${filePath}`, { field: key, value: filePath });
+        if (stats.size > this.maxFileSize) {
+          throw new ValidationError(`File too large: ${filePath} (${stats.size} bytes, max: ${this.maxFileSize})`, { field: key, value: filePath });
         }
+        const type = this.getMimeType(filePath);
+        const blob = typeof import_fs2.openAsBlob === "function" ? await (0, import_fs2.openAsBlob)(filePath, { type }) : new Blob([await (0, import_promises.readFile)(filePath)], { type });
+        form.append(key, blob, (0, import_path.basename)(filePath));
       }
-      /**
-       * Check if a value is a file object
-       * @param {any} value - Value to check
-       * @returns {boolean} True if file object
-       */
       isFileObject(value) {
         if (!value || typeof value !== "object") return false;
-        return value.stream || value.buffer || value.data || value.filename && (value.content || value.data);
+        return Boolean(value.stream || value.buffer || value.data || value.filename && (value.content || value.data));
       }
-      /**
-       * Check if a string is a file path
-       * @param {string} value - Value to check
-       * @returns {boolean} True if file path
-       */
       isFilePath(value) {
         if (typeof value !== "string") return false;
-        return (value.includes("/") || value.includes("\\")) && !value.includes("\n");
+        return (value.includes("/") || value.includes("\\")) && !value.includes("\n") && (0, import_fs2.existsSync)(value);
       }
-      /**
-       * Get MIME type for a file path
-       * @param {string} filePath - File path
-       * @returns {string} MIME type
-       */
       getMimeType(filePath) {
         const ext = filePath.toLowerCase().split(".").pop();
         const mimeTypes = {
@@ -1937,118 +1928,31 @@ var init_form_data_handler = __esm({
         };
         return mimeTypes[ext] || "application/octet-stream";
       }
-      /**
-       * Convert FormData to headers and body for fetch
-       * @param {FormData} form - FormData instance
-       * @returns {Promise<Object>} Headers and body
-       */
-      async getFormRequestData(form) {
-        return new Promise((resolve, reject) => {
-          const headers = form.getHeaders();
-          form.getLength((err, length) => {
-            if (err) {
-              reject(err);
-              return;
-            }
-            if (length) {
-              headers["Content-Length"] = length;
-            }
-            resolve({
-              headers,
-              body: form
-            });
-          });
-        });
-      }
-      /**
-       * Validate form data before sending
-       * @param {FormData} form - FormData to validate
-       * @param {Object} options - Validation options
-       * @returns {Promise<boolean>} True if valid
-       */
-      async validateFormData(form, options = {}) {
-        const maxSize = options.maxSize || this.maxFileSize;
-        return new Promise((resolve, reject) => {
-          form.getLength((err, length) => {
-            if (err) {
-              reject(new ValidationError("Failed to calculate form data length", { value: form }));
-              return;
-            }
-            if (length > maxSize) {
-              reject(new ValidationError(`Form data too large: ${length} bytes (max: ${maxSize})`, {
-                value: length,
-                limit: maxSize
-              }));
-              return;
-            }
-            resolve(true);
-          });
-        });
-      }
-      /**
-       * Create multipart form data from mixed content
-       * @param {Object} data - Data object with mixed content types
-       * @param {Object} options - Options
-       * @returns {FormData} FormData instance
-       */
-      createMixedFormData(data, options = {}) {
-        const form = new import_form_data.default();
-        const files = {};
-        const regularData = {};
-        Object.entries(data).forEach(([key, value]) => {
-          if (this.isFileObject(value) || typeof value === "string" && this.isFilePath(value)) {
-            files[key] = value;
-          } else {
-            regularData[key] = value;
-          }
-        });
-        if (options.jsonData && Object.keys(regularData).length > 0) {
-          form.append("data", JSON.stringify(regularData), {
-            contentType: "application/json"
-          });
-        } else {
-          Object.entries(regularData).forEach(([key, value]) => {
-            this.appendToForm(form, key, value);
-          });
-        }
-        Object.entries(files).forEach(([key, value]) => {
-          this.appendToForm(form, key, value);
-        });
-        return form;
-      }
-      /**
-       * Get statistics about form data
-       * @param {FormData} form - FormData instance
-       * @returns {Promise<Object>} Statistics
-       */
-      async getFormStats(form) {
-        return new Promise((resolve, reject) => {
-          form.getLength((err, length) => {
-            if (err) {
-              reject(err);
-              return;
-            }
-            resolve({
-              contentLength: length,
-              boundary: form.getBoundary(),
-              headers: form.getHeaders()
-            });
-          });
-        });
-      }
     };
     form_data_handler_default = FormDataHandler;
   }
 });
 
 // lib/http-client.js
-var import_https, import_http, import_url, import_querystring, HttpClient, http_client_default;
+function getHeader(headers, name) {
+  const target = name.toLowerCase();
+  for (const key of Object.keys(headers)) {
+    if (key.toLowerCase() === target) return headers[key];
+  }
+  return void 0;
+}
+function deleteHeader(headers, name) {
+  const target = name.toLowerCase();
+  for (const key of Object.keys(headers)) {
+    if (key.toLowerCase() === target) delete headers[key];
+  }
+}
+var import_undici, import_url, import_node_querystring, HttpClient, http_client_default;
 var init_http_client = __esm({
   "lib/http-client.js"() {
-    import_https = require("https");
-    import_http = require("http");
+    import_undici = require("undici");
     import_url = require("url");
-    import_querystring = __toESM(require("querystring"), 1);
+    import_node_querystring = __toESM(require("node:querystring"), 1);
     init_errors();
     init_retry_strategy();
     init_cookie_jar();
@@ -2064,18 +1968,15 @@ var init_http_client = __esm({
           rejectUnauthorized: options.rejectUnauthorized !== false,
           ...options
         };
-        this.httpsAgent = new import_https.Agent({
-          keepAlive: this.options.keepAlive,
-          maxSockets: this.options.maxSockets,
-          maxFreeSockets: this.options.maxFreeSockets,
-          timeout: this.options.freeSocketTimeout,
-          rejectUnauthorized: this.options.rejectUnauthorized
-        });
-        this.httpAgent = new import_http.Agent({
-          keepAlive: this.options.keepAlive,
-          maxSockets: this.options.maxSockets,
-          maxFreeSockets: this.options.maxFreeSockets,
-          timeout: this.options.freeSocketTimeout
+        this.dispatcher = new import_undici.Agent({
+          connections: this.options.maxSockets,
+          pipelining: this.options.keepAlive ? 1 : 0,
+          // 0 disables keep-alive → per-request connections
+          keepAliveTimeout: this.options.freeSocketTimeout,
+          headersTimeout: this.options.timeout,
+          bodyTimeout: this.options.timeout,
+          // finding B6: body reads honor the deadline
+          connect: { rejectUnauthorized: this.options.rejectUnauthorized }
         });
         this.retryStrategy = new retry_strategy_default(options.retry || {});
         this.cookieJar = new cookie_jar_default(options.cookies || {});
@@ -2144,6 +2045,7 @@ var init_http_client = __esm({
           verbose = false,
           attempt = 0
         } = config;
+        const effectiveTimeout = timeout ?? this.options.timeout;
         let requestUrl = new import_url.URL(url);
         if (searchParams) {
           Object.entries(searchParams).forEach(([key, value]) => {
@@ -2151,8 +2053,8 @@ var init_http_client = __esm({
           });
         }
         let requestHeaders = { ...headers };
-        if (!requestHeaders["User-Agent"]) {
-          requestHeaders["User-Agent"] = "ak-fetch/1.0";
+        if (!getHeader(requestHeaders, "user-agent")) {
+          requestHeaders["User-Agent"] = "ak-fetch/2";
         }
         requestHeaders = await this.cookieJar.addCookiesToHeaders(requestHeaders, requestUrl.toString());
         let requestBody = null;
@@ -2168,7 +2070,8 @@ var init_http_client = __esm({
               processedData = transform(processedData);
             }
           }
-          if (requestHeaders["Content-Type"] === "application/x-www-form-urlencoded") {
+          const contentType = getHeader(requestHeaders, "content-type");
+          if (contentType === "application/x-www-form-urlencoded") {
             let payload = processedData;
             if (bodyParams) {
               if (bodyParams.dataKey) {
@@ -2178,14 +2081,12 @@ var init_http_client = __esm({
                 payload = { ...bodyParams, ...processedData };
               }
             }
-            requestBody = import_querystring.default.stringify(payload);
-          } else if (requestHeaders["Content-Type"] && requestHeaders["Content-Type"].startsWith("multipart/form-data")) {
-            const formData = this.formDataHandler.createFormData(processedData);
-            const formRequestData = await this.formDataHandler.getFormRequestData(formData);
-            requestHeaders = { ...requestHeaders, ...formRequestData.headers };
-            requestBody = formRequestData.body;
+            requestBody = import_node_querystring.default.stringify(payload);
+          } else if (contentType && contentType.startsWith("multipart/form-data")) {
+            deleteHeader(requestHeaders, "content-type");
+            requestBody = await this.formDataHandler.createFormData(processedData);
           } else {
-            if (!requestHeaders["Content-Type"]) {
+            if (!contentType) {
               requestHeaders["Content-Type"] = "application/json";
             }
             if (bodyParams) {
@@ -2208,30 +2109,35 @@ var init_http_client = __esm({
             body: requestBody
           };
         }
-        const agent = requestUrl.protocol === "https:" ? this.httpsAgent : this.httpAgent;
         const fetchOptions = {
           method,
           headers: requestHeaders,
           body: requestBody,
-          agent,
-          timeout,
-          redirect: "follow",
-          compress: true
+          dispatcher: this.dispatcher,
+          // finding B1: the option native fetch actually honors
+          redirect: "follow"
         };
         if (["GET", "HEAD", "OPTIONS"].includes(method)) {
           delete fetchOptions.body;
         }
         try {
-          const response = await this.fetchWithTimeout(requestUrl, fetchOptions, timeout);
-          await this.cookieJar.processResponseHeaders(
-            Object.fromEntries(response.headers.entries()),
-            requestUrl.toString()
-          );
+          const response = await this.fetchWithTimeout(requestUrl, fetchOptions, effectiveTimeout);
+          if (this.cookieJar.isEnabled()) {
+            const setCookies = typeof response.headers.getSetCookie === "function" ? response.headers.getSetCookie() : response.headers.get("set-cookie") ? [response.headers.get("set-cookie")] : [];
+            if (setCookies.length > 0) {
+              await this.cookieJar.setCookies(setCookies, requestUrl.toString());
+            }
+          }
           if (response.status === 429) {
-            throw this.retryStrategy.createRateLimitError(
+            const errorBody = await this.getResponseBody(response).catch(() => null);
+            const rateLimitError = this.retryStrategy.createRateLimitError(
               Object.fromEntries(response.headers.entries()),
               response.status
             );
+            rateLimitError.body = errorBody;
+            rateLimitError.url = requestUrl.toString();
+            rateLimitError.method = method;
+            throw rateLimitError;
           }
           if (!response.ok) {
             const errorBody = await this.getResponseBody(response);
@@ -2267,8 +2173,8 @@ var init_http_client = __esm({
             });
           }
           if (error.name === "AbortError" || error.code === "ETIMEDOUT") {
-            throw new TimeoutError(`Request timeout after ${timeout}ms`, {
-              timeout,
+            throw new TimeoutError(`Request timeout after ${effectiveTimeout}ms`, {
+              timeout: effectiveTimeout,
               url: requestUrl.toString(),
               method
             });
@@ -2355,19 +2261,16 @@ var init_http_client = __esm({
        * @returns {Object} Statistics
        */
       getStats() {
+        const s = this.dispatcher.stats ?? {};
+        const agentStats = {
+          maxSockets: this.options.maxSockets,
+          maxFreeSockets: this.options.maxFreeSockets,
+          sockets: s.connected ?? 0,
+          freeSockets: s.free ?? 0
+        };
         return {
-          httpsAgent: {
-            maxSockets: this.httpsAgent.maxSockets,
-            maxFreeSockets: this.httpsAgent.maxFreeSockets,
-            sockets: Object.keys(this.httpsAgent.sockets).length,
-            freeSockets: Object.keys(this.httpsAgent.freeSockets).length
-          },
-          httpAgent: {
-            maxSockets: this.httpAgent.maxSockets,
-            maxFreeSockets: this.httpAgent.maxFreeSockets,
-            sockets: Object.keys(this.httpAgent.sockets).length,
-            freeSockets: Object.keys(this.httpAgent.freeSockets).length
-          },
+          httpsAgent: agentStats,
+          httpAgent: agentStats,
           retryStrategy: this.retryStrategy.getStats(),
           cookieJar: this.cookieJar.getStats()
         };
@@ -2376,8 +2279,7 @@ var init_http_client = __esm({
        * Close HTTP client and clean up resources
        */
       destroy() {
-        this.httpsAgent.destroy();
-        this.httpAgent.destroy();
+        this.dispatcher.destroy();
       }
     };
     http_client_default = HttpClient;
@@ -2406,6 +2308,9 @@ var init_circular_buffer = __esm({
        * @since 2.0.0
        */
       constructor(maxSize = 1e3) {
+        if (!Number.isFinite(maxSize) || maxSize < 1) {
+          throw new Error("CircularBuffer maxSize must be a positive number");
+        }
         this.maxSize = maxSize;
         this.buffer = new Array(maxSize);
         this.head = 0;
@@ -2694,12 +2599,12 @@ var init_circular_buffer = __esm({
 });
 
 // lib/stream-processors.js
-var import_stream, import_fs3, import_promises, StreamProcessors, stream_processors_default;
+var import_stream, import_fs3, import_promises2, StreamProcessors, stream_processors_default;
 var init_stream_processors = __esm({
   "lib/stream-processors.js"() {
     import_stream = require("stream");
     import_fs3 = require("fs");
-    import_promises = require("stream/promises");
+    import_promises2 = require("stream/promises");
     init_errors();
     StreamProcessors = class {
       constructor(options = {}) {
@@ -2997,7 +2902,7 @@ var init_stream_processors = __esm({
             callback(null, prefix + JSON.stringify(chunk, null, options.indent));
           }
         });
-        await (0, import_promises.pipeline)(dataStream, transformStream, writeStream, { end: false });
+        await (0, import_promises2.pipeline)(dataStream, transformStream, writeStream, { end: false });
         writeStream.write("]");
         await new Promise((resolve, reject) => {
           writeStream.end();
@@ -3013,7 +2918,7 @@ var init_stream_processors = __esm({
        */
       async streamCSV(dataStream, writeStream, options = {}) {
         const csvTransform = this.createCSVTransform(options);
-        await (0, import_promises.pipeline)(dataStream, csvTransform, writeStream);
+        await (0, import_promises2.pipeline)(dataStream, csvTransform, writeStream);
       }
       /**
        * Stream data as NDJSON
@@ -3023,7 +2928,7 @@ var init_stream_processors = __esm({
        */
       async streamNDJSON(dataStream, writeStream, options = {}) {
         const ndjsonTransform = this.createJSONLStringifyTransform(options);
-        await (0, import_promises.pipeline)(dataStream, ndjsonTransform, writeStream);
+        await (0, import_promises2.pipeline)(dataStream, ndjsonTransform, writeStream);
       }
       /**
        * Get unique keys from a stream of objects
@@ -3041,7 +2946,7 @@ var init_stream_processors = __esm({
             callback();
           }
         });
-        await (0, import_promises.pipeline)(dataStream, keyExtractor);
+        await (0, import_promises2.pipeline)(dataStream, keyExtractor);
         return Array.from(keysSet);
       }
     };
@@ -3185,13 +3090,12 @@ function applyPresetTransform(record, presetName, errorHandler) {
     throw error;
   }
 }
-var import_murmurhash, import_dayjs, import_utc, import_json_stable_stringify, MAX_STR_LEN, PRESET_REGISTRY;
+var import_murmurhash, import_dayjs, import_utc, MAX_STR_LEN, PRESET_REGISTRY;
 var init_presets = __esm({
   "lib/presets.js"() {
     import_murmurhash = __toESM(require("murmurhash"), 1);
     import_dayjs = __toESM(require("dayjs"), 1);
     import_utc = __toESM(require("dayjs/plugin/utc.js"), 1);
-    import_json_stable_stringify = __toESM(require("json-stable-stringify"), 1);
     import_dayjs.default.extend(import_utc.default);
     MAX_STR_LEN = 255;
     PRESET_REGISTRY = {
@@ -3218,6 +3122,9 @@ __export(index_exports, {
   default: () => index_default
 });
 module.exports = __toCommonJS(index_exports);
+function resolveRetries(retries) {
+  return retries === null ? 0 : retries ?? 3;
+}
 async function invokeErrorHandler(handler, error, data = void 0) {
   if (!handler || typeof handler !== "function") return;
   try {
@@ -3275,24 +3182,19 @@ async function processMultipleConfigs(configs) {
     concurrency,
     delay: delay ? `${delay}ms` : "none"
   });
-  const queue = new import_run_queue.default({ maxConcurrency: concurrency });
+  const pool = new TaskPool(concurrency);
   const results = [];
   let reqCount = 0;
   let errorCount = 0;
   const totalCount = configs.length;
   for (const config of configs) {
-    queue.add(0, async () => {
-      if (delay > 0) {
-        await new Promise((resolve) => setTimeout(resolve, delay));
-      }
+    await pool.submit(async () => {
+      if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
       try {
         reqCount++;
         const result = await processSingleConfig(config, false);
-        if (Array.isArray(result)) {
-          results.push(...result);
-        } else {
-          results.push(result);
-        }
+        if (Array.isArray(result)) results.push(...result);
+        else results.push(result);
         logger.progress(reqCount, totalCount);
       } catch (error) {
         errorCount++;
@@ -3302,7 +3204,7 @@ async function processMultipleConfigs(configs) {
       }
     });
   }
-  await queue.run();
+  await pool.drain();
   const endTime = Date.now();
   const duration = endTime - startTime;
   const finalResults = typeof hook === "function" ? hook(results) : results;
@@ -3315,22 +3217,13 @@ async function processMultipleConfigs(configs) {
     duration,
     clockTime: prettyTime(duration),
     reqCount,
-    rowCount: reqCount,
-    rps: Math.floor(reqCount / (duration / 1e3)),
+    rowCount: totalCount,
+    rps: duration > 0 ? Math.floor(reqCount / (duration / 1e3)) : reqCount,
     errors: errorCount,
     configCount: totalCount
   };
   logger.complete(finalStats);
-  return {
-    responses: finalResults,
-    duration,
-    clockTime: prettyTime(duration),
-    reqCount,
-    rowCount: totalCount,
-    rps: Math.floor(reqCount / (duration / 1e3)),
-    errors: errorCount,
-    configCount: totalCount
-  };
+  return finalStats;
 }
 async function processSingleConfig(config, isMainJob = true) {
   const startTime = Date.now();
@@ -3475,7 +3368,7 @@ async function executeSingleRequest(config, logger) {
     enableConnectionPooling: config.enableConnectionPooling ?? true,
     keepAlive: config.keepAlive ?? true,
     concurrency: config.concurrency ?? 10,
-    retries: config.retries ?? 3,
+    retries: resolveRetries(config.retries),
     retryDelay: config.retryDelay ?? 1e3,
     retryOn: config.retryOn ?? [408, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524],
     retryHandler: config.retryHandler || void 0,
@@ -3493,10 +3386,9 @@ async function executeSingleRequest(config, logger) {
     if (logger && logger.isVerbose()) {
       logger.info("Executing single request (no batching)");
     }
+    const startTime = Date.now();
     const response = await httpClient.request(config);
-    const endTime = Date.now();
-    const startTime = endTime;
-    const duration = endTime - startTime;
+    const duration = Date.now() - startTime;
     const result = {
       responses: [response],
       duration,
@@ -3526,8 +3418,7 @@ async function createDataStream(config) {
       const filePath = import_path2.default.resolve(data);
       const fileExt = import_path2.default.extname(filePath).toLowerCase();
       if (fileExt === ".json") {
-        const fileContent = require("fs").readFileSync(filePath, "utf8");
-        const jsonData = JSON.parse(fileContent);
+        const jsonData = JSON.parse((0, import_fs4.readFileSync)(filePath, "utf8"));
         return import_stream2.Readable.from(Array.isArray(jsonData) ? jsonData : [jsonData]);
       } else {
         return (0, import_fs4.createReadStream)(filePath, { highWaterMark }).pipe(streamProcessors.createJSONLTransform());
@@ -3564,22 +3455,22 @@ async function processDataStream(stream, config, logger) {
     storeResponses = true,
     forceGC = false
   } = config;
-  let queue = new import_run_queue.default({ maxConcurrency: concurrency });
-  const responseBuffer = storeResponses ? new circular_buffer_default(maxResponseBuffer) : null;
+  const effectiveBatchSize = batchSize === 0 ? Infinity : batchSize;
+  const pool = new TaskPool(concurrency, maxTasks);
+  const responseBuffer = storeResponses && maxResponseBuffer > 0 ? new circular_buffer_default(maxResponseBuffer) : null;
   const streamProcessors = new stream_processors_default({ maxMemoryUsage });
   const httpClientConfig = {
     timeout: config.timeout ?? 6e4,
     enableConnectionPooling: config.enableConnectionPooling ?? true,
     keepAlive: config.keepAlive ?? true,
     concurrency: config.concurrency ?? 10,
-    retries: config.retries ?? 3,
+    retries: resolveRetries(config.retries),
     retryDelay: config.retryDelay ?? 1e3,
     retryOn: config.retryOn ?? [408, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524],
     retryHandler: config.retryHandler || void 0,
     useStaticRetryDelay: config.useStaticRetryDelay ?? false,
     enableCookies: config.enableCookies ?? false,
     maxFileSize: config.maxFileSize ?? void 0,
-    // Required properties for BatchRequestConfig compatibility
     url: config.url,
     data: config.data,
     method: config.method ?? "POST",
@@ -3590,20 +3481,12 @@ async function processDataStream(stream, config, logger) {
   let rowCount = 0;
   let errorCount = 0;
   let batch = [];
-  let isStreamPaused = false;
   if (maxMemoryUsage) {
     stream = stream.pipe(streamProcessors.createMemoryMonitorTransform());
   }
-  stream.on("error", (error) => {
-    logger.error("Stream error:", error.message);
-  });
-  stream.on("end", () => {
-    if (logger.isVerbose()) {
-      logger.info(`Stream ended: processed ${(0, import_ak_tools3.comma)(rowCount)} records, ${(0, import_ak_tools3.comma)(reqCount)} requests`);
-    }
-  });
+  stream.on("error", (error) => logger.error("Stream error:", error.message));
+  const isGetRequest = ["GET", "HEAD", "OPTIONS"].includes((config.method || "POST").toUpperCase());
   for await (const data of stream) {
-    const isGetRequest = ["GET", "HEAD", "OPTIONS"].includes((config.method || "POST").toUpperCase());
     const isEmptyGetData = isGetRequest && typeof data === "object" && data !== null && Object.keys(data).length === 0;
     if (data !== null && !isEmptyGetData) {
       let processedData = data;
@@ -3641,53 +3524,39 @@ async function processDataStream(stream, config, logger) {
       batch.push(processedData);
       rowCount++;
     }
-    if (batch.length >= batchSize || data === null && batch.length > 0 || isEmptyGetData && batch.length === 0) {
-      if (isEmptyGetData && batch.length === 0) {
-        addBatchToQueue([]);
-      } else {
-        addBatchToQueue(batch);
-        batch = [];
-      }
-    }
-    if (queue.queued >= maxTasks && !isStreamPaused) {
-      stream.pause();
-      isStreamPaused = true;
-      await queue.run();
-      queue = new import_run_queue.default({ maxConcurrency: concurrency });
-      stream.resume();
-      isStreamPaused = false;
+    if (isEmptyGetData && batch.length === 0) {
+      await submitBatch([]);
+    } else if (batch.length >= effectiveBatchSize) {
+      await submitBatch(batch);
+      batch = [];
     }
   }
   if (batch.length > 0) {
-    addBatchToQueue(batch);
+    await submitBatch(batch);
   }
-  if (queue.queued > 0) {
-    await queue.run();
-  }
+  await pool.drain();
   cleanup();
   httpClient.destroy();
   const responses = responseBuffer ? responseBuffer.toArray() : [];
-  if (forceGC && global.gc) {
-    global.gc();
-  }
+  if (forceGC && global.gc) global.gc();
   return [responses, reqCount, rowCount, errorCount];
-  function addBatchToQueue(currentBatch) {
+  async function submitBatch(currentBatch) {
     const batchData = currentBatch.slice();
-    queue.add(0, async () => {
+    await pool.submit(async () => {
       try {
         const requestConfig = {
           ...config,
+          transform: void 0,
+          // already applied per-record in the stream loop (finding A1)
+          clone: false,
+          // already cloned pre-transform when requested
           data: batchData.length === 0 ? void 0 : batchData.length === 1 ? batchData[0] : batchData
         };
         const response = await httpClient.request(requestConfig);
-        if (responseBuffer) {
-          responseBuffer.push(response);
-        }
+        if (responseBuffer) responseBuffer.push(response);
         reqCount++;
-        if (delay > 0) {
-          await new Promise((resolve) => setTimeout(resolve, delay));
-        }
-        logger.progress(reqCount, Math.ceil(rowCount / (batchSize || 1)), rowCount);
+        if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+        logger.progress(reqCount, Math.ceil(rowCount / (effectiveBatchSize === Infinity ? rowCount || 1 : effectiveBatchSize)), rowCount);
         if (config.responseHandler && typeof config.responseHandler === "function") {
           config.responseHandler(response);
         }
@@ -3695,19 +3564,14 @@ async function processDataStream(stream, config, logger) {
         errorCount++;
         logger.error("Batch processing failed:", error.message);
         await invokeErrorHandler(config.errorHandler, error);
-        if (!config.errorHandler) {
-          if (responseBuffer) {
-            const errorDetails = {
-              error: error.message,
-              batch: batchData
-            };
-            if (error.statusCode) errorDetails.statusCode = error.statusCode;
-            if (error.body) errorDetails.body = error.body;
-            if (error.url) errorDetails.url = error.url;
-            if (error.method) errorDetails.method = error.method;
-            if (error.timestamp) errorDetails.timestamp = error.timestamp;
-            responseBuffer.push(errorDetails);
-          }
+        if (!config.errorHandler && responseBuffer) {
+          const errorDetails = { error: error.message, batch: batchData };
+          if (error.statusCode) errorDetails.statusCode = error.statusCode;
+          if (error.body) errorDetails.body = error.body;
+          if (error.url) errorDetails.url = error.url;
+          if (error.method) errorDetails.method = error.method;
+          if (error.timestamp) errorDetails.timestamp = error.timestamp;
+          responseBuffer.push(errorDetails);
         }
       }
     });
@@ -3762,7 +3626,7 @@ function sanitizeConfig(config) {
   const sanitized = { ...config };
   delete sanitized.data;
   if (sanitized.headers) {
-    const sensitiveHeaders = ["authorization", "cookie", "x-api-key"];
+    const sensitiveHeaders = ["authorization", "cookie", "x-api-key", "x-auth-token", "api-key", "x-access-token", "proxy-authorization"];
     sanitized.headers = { ...sanitized.headers };
     Object.keys(sanitized.headers).forEach((key) => {
       if (sensitiveHeaders.includes(key.toLowerCase())) {
@@ -3952,10 +3816,10 @@ function prettyTime(milliseconds) {
   }
   return result.trim() || "0 seconds";
 }
-var import_run_queue, import_ak_tools3, import_child_process, import_stream2, import_path2, import_fs4, import_dotenv, import_meta2, index_default;
+var import_ak_tools3, import_child_process, import_stream2, import_path2, import_fs4, import_dotenv, import_meta2, index_default;
 var init_index = __esm({
   "index.js"() {
-    import_run_queue = __toESM(require("run-queue"), 1);
+    init_concurrency();
     import_ak_tools3 = require("ak-tools");
     init_cli();
     import_child_process = require("child_process");
