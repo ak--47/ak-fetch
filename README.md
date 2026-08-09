@@ -193,7 +193,7 @@ npx ak-fetch ./events.jsonl \
 |--------|------|---------|-------------|
 | `enableConnectionPooling` | `boolean` | `true` | HTTP connection pooling for performance |
 | `keepAlive` | `boolean` | `true` | Keep TCP connections alive |
-| `maxTasks` | `number` | `25` | Max queued tasks before pausing stream |
+| `maxTasks` | `number` | `25` | Backpressure high-water mark: the input stream pauses while pending tasks ≥ this value. Effective only when set below `concurrency`, since the pool never holds more than `concurrency` tasks pending. |
 | `maxResponseBuffer` | `number` | `1000` | Max responses kept in memory (circular buffer) |
 | `maxMemoryUsage` | `number` | `undefined` | Memory limit in bytes |
 | `forceGC` | `boolean` | `false` | Force garbage collection after batches |

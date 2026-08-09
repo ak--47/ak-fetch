@@ -36,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **B15**: Fixed CLI `batch_size` default of 2 contradicting library default of 1
 
 #### Performance & Architecture
-- **C1**: Fixed wave-based concurrency causing sawtooth throughput — replaced with a continuous task pool that admits a queued task the instant a running one frees a slot, instead of draining the whole queue between waves. Measured on a local 30ms-latency server (20 requests, `batchSize: 1`, `concurrency: 10`): peak concurrent requests 10, wall clock 86ms.
+- **C1**: Fixed wave-based concurrency causing sawtooth throughput — replaced with a continuous task pool that admits a queued task the instant a running one frees a slot, instead of draining the whole queue between waves. Measured on a local 30ms-latency server (20 requests, `batchSize: 1`, `concurrency: 10`): peak concurrent requests 10, wall clock 86ms. Responses are stored in completion order when `concurrency` > 1 (unchanged from 2.0.x concurrent behavior).
 - **C4**: Fixed `User-Agent` header showing wrong version (`ak-fetch/1.0` → `ak-fetch/2`)
 
 ### Changed

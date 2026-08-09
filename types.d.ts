@@ -35,7 +35,7 @@ interface BatchRequestConfig {
   concurrency?: number;
 
   /**
-   * Maximum queued tasks before pausing stream
+   * Backpressure high-water mark: the input stream pauses while pending tasks ≥ this value. Effective only when set below `concurrency`, since the pool never holds more than `concurrency` tasks pending.
    * @default 25
    * @example 50
    */
