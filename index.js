@@ -268,7 +268,7 @@ function validateInput(PARAMS) {
  * const flatResults = await processMultipleConfigs(configs);
  * 
  * @since 2.0.0
- * @param {BatchRequestConfig[]} configs - Array of configurations to process ITS RIGHT HERE!!!!!
+ * @param {BatchRequestConfig[]} configs - Array of configurations to process
  * @returns {Promise<Result>} 
  */
 async function processMultipleConfigs(configs) {
@@ -277,7 +277,10 @@ async function processMultipleConfigs(configs) {
     const firstConfig = configs[0];
     const concurrency = firstConfig?.concurrency || 10;
     const delay = firstConfig?.delay || 0;
-    const verbose = firstConfig?.verbose !== false;
+    // finding B14/M-1: opt IN, matching setDefaults() and types.d.ts (@default false).
+    // This path used to default verbose TRUE, so a config array was noisy while the
+    // identical single config was silent.
+    const verbose = firstConfig?.verbose === true;
     const logFile = firstConfig?.logFile;
     const format = firstConfig?.format || 'json';
     const hook = firstConfig?.hook;

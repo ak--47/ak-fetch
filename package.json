@@ -20,6 +20,7 @@
 		"lib/",
 		"cli.js",
 		"README.md",
+		"CHANGELOG.md",
 		"dist/index.cjs"
 	],
 	"scripts": {

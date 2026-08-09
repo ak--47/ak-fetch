@@ -62,6 +62,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Node.js >=18.17 required** (was >=16 which never worked): Documented engine requirement now matches reality. Native fetch requires Node 18+, and the `undici@6` dependency declares `engines: >=18.17`.
 
+- **`maxTasks` means something different now.** Under the old run-queue engine it was a wave size: ak-fetch queued up to `maxTasks` tasks, paused the input stream, drained the queue all the way to zero, then started the next wave. Under the continuous TaskPool it is a plain backpressure high-water mark — the stream pauses while accepted-but-unfinished tasks are at or above `maxTasks` and resumes as soon as one finishes, with no drain-to-zero barrier. Two consequences worth knowing: (1) because the pool never accepts more than `concurrency` tasks at once, any `maxTasks` greater than `concurrency` can never fire, which includes the shipped defaults (`maxTasks: 25` vs `concurrency: 10`) — so for most users the setting is now inert and the sawtooth it used to cause is gone; and (2) `maxTasks: 0` now means "no backpressure at all" rather than the old effective "drain constantly." If you were using `maxTasks` to throttle memory, set it *below* your `concurrency` to keep having an effect. This is a behavior change to a field we otherwise froze for this release; we made it because the wave barrier was the direct cause of the throughput sawtooth fixed in C1, but it was not in the documented-contradiction list and is called out here for that reason.
+
+- **A config array no longer forces `verbose: true`** (second half of B14): `setDefaults()` and `types.d.ts` have always documented `verbose` as defaulting to `false`, and the single-config path honored that, but the multi-config path defaulted it to `true` — so passing an array of configs printed a banner and progress bar that the identical work as a single config did silently. Both paths now default to `false`. Pass `verbose: true` on the first config to get the old array behavior back.
+
 ### Removed
 
 - **Dependencies**: Removed unused/dead dependencies:

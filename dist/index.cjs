@@ -3208,7 +3208,7 @@ async function processMultipleConfigs(configs) {
   const firstConfig = configs[0];
   const concurrency = firstConfig?.concurrency || 10;
   const delay = firstConfig?.delay || 0;
-  const verbose = firstConfig?.verbose !== false;
+  const verbose = firstConfig?.verbose === true;
   const logFile = firstConfig?.logFile;
   const format = firstConfig?.format || "json";
   const hook = firstConfig?.hook;
