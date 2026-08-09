@@ -339,25 +339,15 @@ async function processMultipleConfigs(configs) {
         duration,
         clockTime: prettyTime(duration),
         reqCount,
-        rowCount: reqCount,
-        rps: Math.floor(reqCount / (duration / 1000)),
+        rowCount: totalCount,
+        rps: duration > 0 ? Math.floor(reqCount / (duration / 1000)) : reqCount,
         errors: errorCount,
         configCount: totalCount
     };
 
     logger.complete(finalStats);
 
-    // Return comprehensive stats for multiple configurations
-    return {
-        responses: finalResults,
-        duration,
-        clockTime: prettyTime(duration),
-        reqCount,
-        rowCount: totalCount,
-        rps: Math.floor(reqCount / (duration / 1000)),
-        errors: errorCount,
-        configCount: totalCount
-    };
+    return finalStats;
 }
 
 /**
@@ -738,12 +728,10 @@ async function executeSingleRequest(config, logger) {
         if (logger && logger.isVerbose()) {
             logger.info('Executing single request (no batching)');
         }
-        
+
+        const startTime = Date.now();
         const response = await httpClient.request(config);
-        
-        const endTime = Date.now();
-        const startTime = endTime; // Single request, minimal duration
-        const duration = endTime - startTime;
+        const duration = Date.now() - startTime;
         
         const result = {
             responses: [response],
@@ -1210,12 +1198,12 @@ async function writeLogFile(filePath, data, format, verbose) {
 function sanitizeConfig(config) {
     const sanitized = { ...config };
     delete sanitized.data;
-    
+
     // Mask sensitive headers
     if (sanitized.headers) {
-        const sensitiveHeaders = ['authorization', 'cookie', 'x-api-key'];
+        const sensitiveHeaders = ['authorization', 'cookie', 'x-api-key', 'x-auth-token', 'api-key', 'x-access-token', 'proxy-authorization'];
         sanitized.headers = { ...sanitized.headers };
-        
+
         Object.keys(sanitized.headers).forEach(key => {
             if (sensitiveHeaders.includes(key.toLowerCase())) {
                 // @ts-ignore
@@ -1223,7 +1211,7 @@ function sanitizeConfig(config) {
             }
         });
     }
-    
+
     return sanitized;
 }
 

@@ -69,7 +69,7 @@ interface BatchRequestConfig {
 
   /**
    * Enable detailed logging and progress display
-   * @default true
+   * @default false
    * @example false
    */
   verbose?: boolean;
