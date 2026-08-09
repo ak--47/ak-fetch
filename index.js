@@ -40,6 +40,14 @@ import {
 
 
 /**
+ * retries: null → fire-and-forget (0 retries); undefined → default 3.
+ */
+function resolveRetries(retries) {
+    return retries === null ? 0 : (retries ?? 3);
+}
+
+
+/**
  * Invoke error handler with async support
  * @param {Function} handler - Error handler function (sync or async)
  * @param {Error} error - The error object
@@ -720,7 +728,7 @@ async function executeSingleRequest(config, logger) {
         enableConnectionPooling: config.enableConnectionPooling ?? true,
         keepAlive: config.keepAlive ?? true,
         concurrency: config.concurrency ?? 10,
-        retries: config.retries ?? 3,
+        retries: resolveRetries(config.retries),
         retryDelay: config.retryDelay ?? 1000,
         retryOn: config.retryOn ?? [408, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524],
         retryHandler: config.retryHandler || undefined,
@@ -921,7 +929,7 @@ async function processDataStream(stream, config, logger) {
         enableConnectionPooling: config.enableConnectionPooling ?? true,
         keepAlive: config.keepAlive ?? true,
         concurrency: config.concurrency ?? 10,
-        retries: config.retries ?? 3,
+        retries: resolveRetries(config.retries),
         retryDelay: config.retryDelay ?? 1000,
         retryOn: config.retryOn ?? [408, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524],
         retryHandler: config.retryHandler || undefined,
