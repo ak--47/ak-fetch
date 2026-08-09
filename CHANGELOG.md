@@ -53,7 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `retries: 3` → up to 4 attempts (1 + 3 retries) — unchanged
 
 - **`batchSize: 0` now sends all records in one request** (was one request per record):
-  - Migration: Use `batchSize: 1` for per-record requests
+  - Migration: If you were relying on `batchSize: 0` sending one request per record (the buggy 2.0.16 behavior), change to `batchSize: 1` for the same result.
   - This matches the documented behavior in README, CLI help, and types
 
 - **Connection pooling now real**: Socket reuse is now functional. `enableConnectionPooling: true` (default) uses persistent HTTP connections with proper keep-alive. Throughput improvements expected for multi-request workloads.
