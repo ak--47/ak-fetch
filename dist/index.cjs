@@ -41,35 +41,62 @@ var init_concurrency = __esm({
        *   before submit() blocks (stream backpressure high-water mark)
        */
       constructor(concurrency, maxPending = Infinity) {
-        this.concurrency = concurrency;
-        this.maxPending = maxPending;
+        this.concurrency = concurrency > 0 ? concurrency : 1;
+        this.maxPending = maxPending > 0 ? maxPending : Infinity;
         this.active = 0;
         this.waiters = [];
         this.pending = /* @__PURE__ */ new Set();
       }
+      /**
+       * Accept a task into the pool.
+       *
+       * Resolves as soon as the task has been admitted to a run slot — the task
+       * itself keeps running in the background. Rejections from `fn` are absorbed
+       * by the pool (tasks in this codebase own their error handling) so they can
+       * never surface as unhandled rejections.
+       *
+       * @param {() => Promise<any>} fn - the task to run
+       * @returns {Promise<void>} resolves on acceptance
+       */
       async submit(fn) {
         while (this.pending.size >= this.maxPending) {
           await Promise.race(this.pending);
         }
-        const task = this.#run(fn);
-        const tracked = task.catch(() => {
-        }).finally(() => this.pending.delete(tracked));
-        this.pending.add(tracked);
-        return task;
-      }
-      async #run(fn) {
         if (this.active >= this.concurrency) {
           await new Promise((resolve) => this.waiters.push(resolve));
+        } else {
+          this.active++;
         }
-        this.active++;
+        const tracked = this.#run(fn).finally(() => this.pending.delete(tracked));
+        this.pending.add(tracked);
+      }
+      /**
+       * Run an admitted task and release its slot when it settles.
+       * Never rejects.
+       * @param {() => Promise<any>} fn
+       */
+      async #run(fn) {
         try {
-          return await fn();
+          await fn();
+        } catch {
         } finally {
-          this.active--;
-          const next = this.waiters.shift();
-          if (next) next();
+          this.#release();
         }
       }
+      /**
+       * Release one run slot. If someone is waiting, the slot is handed straight
+       * to them (`active` is NOT decremented) so a submit() arriving before the
+       * waiter resumes still sees a full pool and cannot over-admit.
+       */
+      #release() {
+        const next = this.waiters.shift();
+        if (next) next();
+        else this.active--;
+      }
+      /**
+       * Wait for every accepted task to finish.
+       * @returns {Promise<void>}
+       */
       async drain() {
         while (this.pending.size > 0) {
           await Promise.allSettled([...this.pending]);
@@ -726,7 +753,7 @@ DOCS: https://github.com/ak--47/ak-fetch`).command("$0", "bulk fetch calls", () 
   }).option("batch_size", {
     alias: "batchSize",
     demandOption: false,
-    describe: "Records per HTTP request (0 disables batching)",
+    describe: "Records per HTTP request (0 = send all records in one request)",
     type: "number",
     default: 1
   }).option("concurrency", {
@@ -1002,7 +1029,7 @@ function parse(val, defaultVal = void 0) {
   if (Object.keys(val).length === 0) return defaultVal;
   return val;
 }
-var import_yargs, import_fs, import_ak_tools2, import_meta, packageJson, version, hero, banner, welcome, cli_default;
+var import_yargs, import_fs, import_ak_tools2, import_meta, FALLBACK_VERSION, version, hero, banner, welcome, cli_default;
 var init_cli = __esm({
   "cli.js"() {
     import_yargs = __toESM(require("yargs"), 1);
@@ -1010,8 +1037,12 @@ var init_cli = __esm({
     import_ak_tools2 = __toESM(require("ak-tools"), 1);
     init_logger();
     import_meta = {};
-    packageJson = JSON.parse((0, import_fs.readFileSync)(new URL("./package.json", import_meta.url), "utf8"));
-    ({ version } = packageJson);
+    FALLBACK_VERSION = "2.1.0";
+    version = FALLBACK_VERSION;
+    try {
+      version = JSON.parse((0, import_fs.readFileSync)(new URL("./package.json", import_meta.url), "utf8")).version;
+    } catch {
+    }
     hero = String.raw`
 ░▒▓██████▓▒░░▒▓█▓▒░░▒▓█▓▒░      ░▒▓████████▓▒░▒▓████████▓▒░▒▓████████▓▒░▒▓██████▓▒░░▒▓█▓▒░░▒▓█▓▒░ 
 ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░      ░▒▓█▓▒░      ░▒▓█▓▒░         ░▒▓█▓▒░  ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ 
@@ -2257,7 +2288,12 @@ var init_http_client = __esm({
         return curlCommand;
       }
       /**
-       * Get HTTP client statistics
+       * Get HTTP client statistics.
+       *
+       * NOTE: undici 6's `Agent` exposes no `.stats` property, so `sockets` and
+       * `freeSockets` are always 0. The keys are kept for shape compatibility
+       * with pre-2.1.0 consumers — do not read them as real socket counts.
+       *
        * @returns {Object} Statistics
        */
       getStats() {
@@ -3779,7 +3815,6 @@ async function handleDryRun(config, logger, isMainJob) {
       }
     }
   }
-  const reqCount = config.batchSize > 0 ? Math.ceil(rowCount / config.batchSize) : Math.max(1, rowCount);
   const endTime = Date.now();
   const duration = endTime - startTime;
   const result = {

@@ -5,9 +5,19 @@ import { readFileSync } from 'fs';
 import u from 'ak-tools';
 import { createLogger } from './lib/logger.js';
 
-// Read package.json for version
-const packageJson = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
-const { version } = packageJson;
+// Read package.json for version.
+// The URL is resolved against this module (not CWD) so the ESM CLI reports the
+// right version from any working directory. In the bundled CJS build esbuild
+// rewrites `import.meta` to `{}`, making `import.meta.url` undefined and
+// `new URL()` throw — which would take down `require('ak-fetch')` at load time.
+// Hence the guard plus a literal fallback.
+export const FALLBACK_VERSION = '2.1.0';
+let version = FALLBACK_VERSION;
+try {
+	version = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version;
+} catch {
+	/* CJS bundle or exotic env: keep the fallback */
+}
 
 async function cliParams() {
 	// @ts-ignore
@@ -51,7 +61,7 @@ DOCS: https://github.com/ak--47/ak-fetch`)
 		.option("batch_size", {
 			alias: 'batchSize',
 			demandOption: false,
-			describe: 'Records per HTTP request (0 disables batching)',
+			describe: 'Records per HTTP request (0 = send all records in one request)',
 			type: 'number',
 			default: 1
 		})
