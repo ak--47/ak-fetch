@@ -7,12 +7,13 @@ describe('TaskPool', () => {
     test('never exceeds the concurrency limit', async () => {
         const pool = new TaskPool(3);
         let active = 0, peak = 0;
+        const tasks = [];
         for (let i = 0; i < 20; i++) {
-            await pool.submit(async () => {
+            tasks.push(pool.submit(async () => {
                 active++; peak = Math.max(peak, active);
                 await sleep(10);
                 active--;
-            });
+            }));
         }
         await pool.drain();
         expect(peak).toBe(3);
@@ -51,7 +52,11 @@ describe('TaskPool', () => {
     test('a throwing task does not break the pool or drain', async () => {
         const pool = new TaskPool(2);
         let ok = 0;
-        await pool.submit(async () => { throw new Error('task blew up'); });
+        try {
+            await pool.submit(async () => { throw new Error('task blew up'); });
+        } catch (e) {
+            // expected
+        }
         await pool.submit(async () => { ok++; });
         await pool.drain();
         expect(ok).toBe(1);

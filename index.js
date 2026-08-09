@@ -314,7 +314,9 @@ async function processMultipleConfigs(configs) {
                 logger.progress(reqCount, totalCount);
             } catch (error) {
                 errorCount++;
+                // @ts-ignore
                 logger.error(`Config ${reqCount} failed:`, error.message);
+                // @ts-ignore
                 results.push({ error: error.message, config: sanitizeConfig(config) });
                 logger.progress(reqCount, totalCount);
             }
@@ -1024,8 +1026,8 @@ async function processDataStream(stream, config, logger) {
             try {
                 const requestConfig = {
                     ...config,
-                    transform: undefined,   // Task 3 invariant (finding A1)
-                    clone: false,
+                    transform: undefined,   // already applied per-record in the stream loop (finding A1)
+                    clone: false,           // already cloned pre-transform when requested
                     data: batchData.length === 0 ? undefined : (batchData.length === 1 ? batchData[0] : batchData)
                 };
                 const response = await httpClient.request(requestConfig);
@@ -1038,6 +1040,7 @@ async function processDataStream(stream, config, logger) {
                 }
             } catch (error) {
                 errorCount++;
+                // @ts-ignore
                 logger.error('Batch processing failed:', error.message);
                 await invokeErrorHandler(config.errorHandler, error);
                 if (!config.errorHandler && responseBuffer) {
