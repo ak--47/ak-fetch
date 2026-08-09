@@ -1925,7 +1925,7 @@ var init_form_data_handler = __esm({
           throw new ValidationError(`File too large: ${filePath} (${stats.size} bytes, max: ${this.maxFileSize})`, { field: key, value: filePath });
         }
         const type = this.getMimeType(filePath);
-        const blob = typeof openAsBlob === "function" ? await openAsBlob(filePath, { type }) : new Blob([await (0, import_promises.readFile)(filePath)], { type });
+        const blob = typeof openAsBlob === "function" ? await openAsBlob(filePath, { type }) : new Blob([new Uint8Array(await (0, import_promises.readFile)(filePath))], { type });
         form.append(key, blob, (0, import_path.basename)(filePath));
       }
       isFileObject(value) {
@@ -2273,7 +2273,10 @@ var init_http_client = __esm({
        * @param {URL} url - Request URL
        * @param {string} method - HTTP method
        * @param {Object} headers - Request headers
-       * @param {string} body - Request body
+       * @param {string | FormData} body - Request body. Multipart bodies arrive here
+       *   as native FormData, which curl cannot express via `-d` (it needs one `-F`
+       *   per field) and which cannot be iterated without consuming it — so it
+       *   renders as a placeholder instead of stringifying to "[object FormData]".
        * @returns {string} Curl command
        */
       generateCurlCommand(url, method, headers, body) {
@@ -2283,8 +2286,9 @@ var init_http_client = __esm({
   -H "${key}: ${value}"`;
         });
         if (body) {
+          const bodyStr = typeof body === "string" ? body : "[FormData - use multipart/form-data]";
           curlCommand += ` \\
-  -d '${body}'`;
+  -d '${bodyStr}'`;
         }
         return curlCommand;
       }

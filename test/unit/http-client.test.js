@@ -301,4 +301,56 @@ describe('HttpClient', () => {
             expect(callArgs.method).toBe('GET');
         });
     });
+
+    /**
+     * Finding I-1 error 2. `HttpClient.executeRequest` routes multipart bodies to
+     * native FormData, then handed that FormData straight to generateCurlCommand,
+     * which templated it into `-d '...'` — producing the useless literal
+     * "[object FormData]". curl can't express multipart via -d anyway (it needs
+     * one -F per field) and FormData can't be iterated without consuming it, so
+     * the honest output is a placeholder.
+     */
+    describe('curl dry run (generateCurlCommand)', () => {
+        test('renders a string body verbatim', async () => {
+            const curl = await httpClient.executeRequest({
+                url: 'https://api.example.com/x',
+                method: 'POST',
+                data: { a: 1 },
+                dryRun: 'curl'
+            });
+
+            expect(typeof curl).toBe('string');
+            expect(curl).toContain('curl -X POST');
+            expect(curl).toContain(`-d '${JSON.stringify({ a: 1 })}'`);
+            expect(global.fetch).not.toHaveBeenCalled();
+        });
+
+        test('renders a FormData body as a placeholder, never "[object FormData]"', async () => {
+            const curl = await httpClient.executeRequest({
+                url: 'https://api.example.com/upload',
+                method: 'POST',
+                data: { field: 'value' },
+                headers: { 'Content-Type': 'multipart/form-data' },
+                dryRun: 'curl'
+            });
+
+            expect(typeof curl).toBe('string');
+            expect(curl).toContain('curl -X POST');
+            expect(curl).toContain('[FormData - use multipart/form-data]');
+            expect(curl).not.toContain('[object FormData]');
+            expect(global.fetch).not.toHaveBeenCalled();
+        });
+
+        test('omits -d entirely when there is no body', () => {
+            const curl = httpClient.generateCurlCommand(
+                new URL('https://api.example.com/x'),
+                'GET',
+                { Accept: 'application/json' },
+                null
+            );
+
+            expect(curl).toContain('-H "Accept: application/json"');
+            expect(curl).not.toContain('-d');
+        });
+    });
 });
