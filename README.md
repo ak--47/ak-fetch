@@ -37,7 +37,7 @@ npx ak-fetch --help
 
 ## 📦 Module Compatibility
 
-ak-fetch is built as an **ESM (ECMAScript Module)** and supports modern Node.js environments (v18+).
+ak-fetch is built as an **ESM (ECMAScript Module)** and supports modern Node.js environments (v18.17+, as required by its `undici` dependency).
 
 ### ESM Import (Recommended)
 

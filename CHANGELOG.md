@@ -26,9 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### CLI & Configuration
 - **B7**: Fixed `batchSize: 0` sending one request per record instead of all records in one request
-- **B8**: Fixed CLI reading `./package.json` from CWD instead of package directory
+- **B8**: Fixed CLI reading `./package.json` from CWD instead of package directory. The version read is also guarded, so the bundled CommonJS build (`require('ak-fetch')`), where esbuild leaves `import.meta.url` undefined, no longer throws `Invalid URL` at load time.
 - **B9**: Fixed CLI `parse()` error handler referencing undefined `this.verbose`
-- **B10**: Fixed `engines: node >=16` when Node 16 lacks native fetch (now requires `>=18`)
+- **B10**: Fixed `engines: node >=16` when Node 16 lacks native fetch (now requires `>=18.17`, the floor declared by `undici@6`)
 - **B11**: Fixed `CircularBuffer(0)` silently corrupting storage with NaN indexes
 - **B12**: Fixed logger writing ANSI cursor codes to non-TTY streams, polluting logs/CI output
 - **B13**: Fixed `executeSingleRequest` always reporting `duration: 0`
@@ -36,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **B15**: Fixed CLI `batch_size` default of 2 contradicting library default of 1
 
 #### Performance & Architecture
-- **C1**: Fixed wave-based concurrency causing sawtooth throughput — replaced with continuous task pool
+- **C1**: Fixed wave-based concurrency causing sawtooth throughput — replaced with a continuous task pool that admits a queued task the instant a running one frees a slot, instead of draining the whole queue between waves. Measured on a local 30ms-latency server (20 requests, `batchSize: 1`, `concurrency: 10`): peak concurrent requests 10, wall clock 86ms.
 - **C4**: Fixed `User-Agent` header showing wrong version (`ak-fetch/1.0` → `ak-fetch/2`)
 
 ### Changed
@@ -60,7 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Multipart uploads now work**: File uploads with `Content-Type: multipart/form-data` now function correctly using native FormData/Blob APIs.
 
-- **Node.js >=18 required** (was >=16 which never worked): Documented engine requirement now matches reality. Native fetch requires Node 18+.
+- **Node.js >=18.17 required** (was >=16 which never worked): Documented engine requirement now matches reality. Native fetch requires Node 18+, and the `undici@6` dependency declares `engines: >=18.17`.
 
 ### Removed
 
@@ -75,7 +75,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Implementation Details
 
 - Replaced node-fetch-style HTTP agents with undici `Agent` passed as `dispatcher` to native fetch
-- Replaced wave-based RunQueue with continuous TaskPool for smooth concurrency
+- Replaced wave-based RunQueue with continuous TaskPool for smooth concurrency. `TaskPool.submit()` resolves on *acceptance* (slot admission under the `maxTasks` backpressure cap), not completion — `drain()` is what awaits the work. Freed slots are handed directly to the next waiter in the same synchronous step so the pool can never over-admit past `concurrency`.
+- `getStats()` keeps its pre-2.1.0 key shape, but undici 6's `Agent` exposes no `.stats`, so the `sockets`/`freeSockets` counts remain 0 rather than real socket counts
 - Migrated multipart handling from `form-data` package to native FormData/Blob APIs
 - Added case-insensitive header utilities (`getHeader`, `deleteHeader`)
 - Fixed timeout coverage to include full request lifecycle (headers + body)

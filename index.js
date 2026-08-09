@@ -1474,7 +1474,6 @@ async function handleDryRun(config, logger, isMainJob) {
         }
     }
 
-    const reqCount = config.batchSize > 0 ? Math.ceil(rowCount / config.batchSize) : Math.max(1, rowCount);
     const endTime = Date.now();
     const duration = endTime - startTime;
 
