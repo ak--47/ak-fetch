@@ -56,4 +56,15 @@ describe('continuous concurrency (findings C1/B7)', () => {
         expect(server.requests[0].body).toEqual([{ a: 1 }, { a: 2 }, { a: 3 }]);
         await server.close();
     });
+
+    test('maxResponseBuffer: 0 stores nothing without corrupting', async () => {
+        const server = await makeServer();
+        const result = await akFetch({
+            url: server.url, data: [{ a: 1 }, { a: 2 }],
+            maxResponseBuffer: 0, verbose: false,
+        });
+        expect(result.responses).toEqual([]);
+        expect(result.reqCount).toBe(2);
+        await server.close();
+    });
 });

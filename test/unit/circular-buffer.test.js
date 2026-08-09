@@ -196,10 +196,10 @@ describe('CircularBuffer', () => {
     describe('edge cases', () => {
         test('should handle single item buffer', () => {
             const singleBuffer = new CircularBuffer(1);
-            
+
             singleBuffer.push('first');
             expect(singleBuffer.toArray()).toEqual(['first']);
-            
+
             singleBuffer.push('second');
             expect(singleBuffer.toArray()).toEqual(['second']);
         });
@@ -207,20 +207,27 @@ describe('CircularBuffer', () => {
         test('should handle complex objects', () => {
             const obj1 = { id: 1, data: [1, 2, 3] };
             const obj2 = { id: 2, nested: { value: 'test' } };
-            
+
             buffer.push(obj1);
             buffer.push(obj2);
-            
+
             expect(buffer.toArray()).toEqual([obj1, obj2]);
         });
 
         test('should maintain references correctly', () => {
             const obj = { value: 'original' };
             buffer.push(obj);
-            
+
             obj.value = 'modified';
-            
+
             expect(buffer.toArray()[0].value).toBe('modified');
+        });
+    });
+
+    describe('size guard (finding B11)', () => {
+        test('constructor throws on maxSize < 1', () => {
+            expect(() => new CircularBuffer(0)).toThrow(/positive/i);
+            expect(() => new CircularBuffer(-5)).toThrow(/positive/i);
         });
     });
 });
