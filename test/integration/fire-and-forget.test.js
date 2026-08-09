@@ -127,6 +127,40 @@ describe('Fire-and-Forget Mode', () => {
 	});
 
 	describe('Fire-and-Forget Performance Characteristics', () => {
+		/**
+		 * Finding M-7: the README and CHANGELOG both sell `retries: null` as the
+		 * "max performance" mode, but nothing compared it to anything — the test
+		 * below only asserted it finished within 30 seconds. This is not a
+		 * benchmark; it pins the *semantics* the performance claim rests on:
+		 * the same workload, run both ways, differs in whether response bodies
+		 * are retained at all.
+		 */
+		test('retains no response bodies, unlike the identical run with retries', async () => {
+			const data = Array.from({ length: 20 }, (_, i) => ({ id: i, payload: `data-${i}`.repeat(10) }));
+			const base = { url: server.url, data, batchSize: 5, concurrency: 5, verbose: false };
+
+			const fireAndForget = await akFetch({ ...base, retries: null });
+			const stored = await akFetch({ ...base, retries: 3 });
+
+			// same work done both ways
+			expect(fireAndForget.rowCount).toBe(20);
+			expect(stored.rowCount).toBe(20);
+			expect(fireAndForget.reqCount).toBe(stored.reqCount);
+			expect(fireAndForget.errors).toBe(0);
+			expect(stored.errors).toBe(0);
+
+			// the difference that makes it "fire and forget": nothing is kept
+			expect(fireAndForget.responses).toEqual([]);
+			expect(stored.responses.length).toBeGreaterThan(0);
+
+			// and what's kept in the normal path is real response bodies — the
+			// per-request work and retained memory that fire-and-forget skips
+			expect(stored.responses[0]).toHaveProperty('status', 200);
+			expect(stored.responses[0].data).toHaveProperty('echo');
+			expect(JSON.stringify(stored.responses).length)
+				.toBeGreaterThan(JSON.stringify(fireAndForget.responses).length);
+		});
+
 		test('should be faster than regular mode due to no response processing', async () => {
 			const largeData = Array.from({ length: 100 }, (_, i) => ({
 				id: i,
@@ -367,11 +401,24 @@ describe('Fire-and-Forget Mode', () => {
 	});
 
 	describe('Fire-and-Forget Validation', () => {
-		test('should validate that retries is explicitly null', () => {
-			// Test that undefined retries doesn't trigger fire-and-forget
-			expect(null).toBe(null); // retries: null should trigger fire-and-forget
-			expect(undefined).not.toBe(null); // retries: undefined should not
-			expect(0).not.toBe(null); // retries: 0 should not
+		test('only an explicit null triggers fire-and-forget; undefined and 0 do not', async () => {
+			// finding M-7: this used to assert `expect(null).toBe(null)` — a tautology
+			// about the language, not about ak-fetch. Exercise the real dispatch.
+			const base = { url: server.url, data: [{ probe: true }], verbose: false };
+
+			const explicitNull = await akFetch({ ...base, retries: null });
+			const omitted = await akFetch({ ...base });
+			const zero = await akFetch({ ...base, retries: 0 });
+
+			// null → fire and forget: nothing retained
+			expect(explicitNull.responses).toEqual([]);
+
+			// undefined (default 3 retries) and 0 (one attempt, no retries) both
+			// still store their responses
+			expect(omitted.responses.length).toBe(1);
+			expect(zero.responses.length).toBe(1);
+			expect(omitted.responses[0]).toHaveProperty('status', 200);
+			expect(zero.responses[0]).toHaveProperty('status', 200);
 		});
 
 		test('should work with explicitly set retries null', async () => {

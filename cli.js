@@ -449,6 +449,11 @@ function parse(val, defaultVal = undefined) {
 			}
 		}
 	}
+	// finding M-7: when both JSON.parse attempts fail, `val` becomes `defaultVal`,
+	// which is `undefined` for most call sites — and `Object.keys(undefined)` throws
+	// `TypeError: Cannot convert undefined or null to object`. So `--headers '{notjson'`
+	// printed the friendly warning and then killed the process anyway.
+	if (val === null || val === undefined) return defaultVal;
 	if (Object.keys(val).length === 0) return defaultVal;
 	return val;
 }

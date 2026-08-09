@@ -142,15 +142,17 @@ describe('Integration Tests - DELETE with Body', () => {
             expect(result.reqCount).toBe(1);
             expect(result.rowCount).toBe(1);
 
-            if (result.responses && result.responses.length > 0) {
-                const response = result.responses[0];
-
-                // Local server echoes back the sent data
-                if (typeof response === 'object' && response.echo) {
-                    expect(response.echo.id).toBe(456);
-                    expect(response.echo.action).toBe('remove');
-                }
-            }
+            // finding M-7: these were nested inside `if (response.echo)`, so the whole
+            // block passed vacuously the moment the echo stopped coming back. The
+            // local server always echoes — assert it unconditionally.
+            // (the echo lives under `.data` — the old guard checked `response.echo`,
+            // which never existed, so it never ran a single assertion)
+            expect(result.responses).toHaveLength(1);
+            const response = result.responses[0];
+            expect(response.status).toBe(200);
+            expect(response.method).toBe('DELETE');
+            expect(response.data.echo).toMatchObject({ id: 456, action: 'remove' });
+            expect(response.data.echo.timestamp).toBeTypeOf('number');
 
             // Verify the request was received by the server
             expect(server.requests.length).toBeGreaterThan(0);

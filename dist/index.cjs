@@ -1026,6 +1026,7 @@ function parse(val, defaultVal = void 0) {
       }
     }
   }
+  if (val === null || val === void 0) return defaultVal;
   if (Object.keys(val).length === 0) return defaultVal;
   return val;
 }
