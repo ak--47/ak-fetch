@@ -37,8 +37,8 @@
 		"prepare": "npm run build",
 		"prune": "rm -rf logs/* && rm -rf coverage/* && rm -rf benchmarks/results/* && rm -rf dist/*",
 		"scratch": "nodemon scratch.mjs",
-		"bench:100k": "DATASET_SIZE=100k node benchmarks/run-all.js",
-		"bench:1m": "DATASET_SIZE=1m node benchmarks/run-all.js",
+		"bench:100k": "DATASET_SIZE=100k node --expose-gc benchmarks/run-all.js",
+		"bench:1m": "DATASET_SIZE=1m node --expose-gc benchmarks/run-all.js",
 		"submit": "npm publish --access public"
 	},
 	"repository": {
