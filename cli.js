@@ -6,7 +6,7 @@ import u from 'ak-tools';
 import { createLogger } from './lib/logger.js';
 
 // Read package.json for version
-const packageJson = JSON.parse(readFileSync('./package.json', 'utf8'));
+const packageJson = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 const { version } = packageJson;
 
 async function cliParams() {
@@ -53,7 +53,7 @@ DOCS: https://github.com/ak--47/ak-fetch`)
 			demandOption: false,
 			describe: 'Records per HTTP request (0 disables batching)',
 			type: 'number',
-			default: 2
+			default: 1
 		})
 		.option("concurrency", {
 			demandOption: false,
@@ -434,8 +434,8 @@ function parse(val, defaultVal = undefined) {
 				if (typeof val === 'string') val = JSON.parse(val?.replace(/'/g, '"'));
 			}
 			catch (secondError) {
-				if (this.verbose) console.log(`error parsing tags: ${val}\ntags must be valid JSON`);
-				val = defaultVal; //bad json
+				console.warn(`could not parse ${val} as JSON; using default`);
+				val = defaultVal; // bad json
 			}
 		}
 	}
