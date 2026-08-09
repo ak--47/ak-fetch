@@ -94,7 +94,10 @@ function stripComments(source) {
 function parseNamedImports(source) {
     const out = [];
     const code = stripComments(source);
-    const re = /(?:^|[\s;}])(?:import|export)\s+([\s\S]*?)\s*from\s*['"]([^'"]+)['"]/g;
+    // Match import/export statements non-greedily per statement by requiring the clause
+    // to not contain another 'from' keyword - prevents earlier export statements from
+    // swallowing later imports
+    const re = /(?:^|[\s;}])(?:import|export)\s+((?:(?!from\s*['"])[\s\S])*?)\s*from\s*['"]([^'"]+)['"]/g;
     let match;
     while ((match = re.exec(code)) !== null) {
         const [, clause, specifier] = match;
@@ -114,8 +117,16 @@ describe('Node 18 ESM link-time compatibility (finding C-1)', () => {
 
     test('the scan actually sees the shipped sources', () => {
         // guards against a regex/glob that silently matches nothing and passes vacuously
-        expect(sources.length).toBeGreaterThanOrEqual(12);
+        // verify presence of core files rather than hardcoding exact count (brittle on module changes)
+        expect(sources.some((f) => f.endsWith('index.js'))).toBe(true);
+        expect(sources.some((f) => f.endsWith('cli.js'))).toBe(true);
         expect(sources.some((f) => f.endsWith('form-data-handler.js'))).toBe(true);
+        // ensure we scanned all lib/*.js modules
+        const libFiles = sources.filter((f) => f.includes('/lib/') && f.endsWith('.js'));
+        const expectedLibModules = readdirSync(path.join(repoRoot, 'lib'))
+            .filter((f) => f.endsWith('.js'))
+            .map((f) => path.join(repoRoot, 'lib', f));
+        expect(libFiles.sort()).toEqual(expectedLibModules.sort());
         const allImports = sources.flatMap((f) => parseNamedImports(readFileSync(f, 'utf8')));
         expect(allImports.length).toBeGreaterThan(0);
     });
