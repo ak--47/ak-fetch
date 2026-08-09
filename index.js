@@ -12,7 +12,7 @@ import cli from './cli.js';
 import { execSync } from 'child_process';
 import { Readable } from 'stream';
 import path from 'path';
-import { createReadStream, existsSync } from 'fs';
+import { createReadStream, existsSync, readFileSync } from 'fs';
 import { config as dotenvConfig } from 'dotenv';
 dotenvConfig({ debug: false, override: false });
 
@@ -828,9 +828,8 @@ async function createDataStream(config) {
             const fileExt = path.extname(filePath).toLowerCase();
             
             if (fileExt === '.json') {
-                // Regular JSON file - read and parse as array
-                const fileContent = require('fs').readFileSync(filePath, 'utf8');
-                const jsonData = JSON.parse(fileContent);
+                // Whole-file JSON (config-sized). JSONL is the streaming path for big data.
+                const jsonData = JSON.parse(readFileSync(filePath, 'utf8'));
                 return Readable.from(Array.isArray(jsonData) ? jsonData : [jsonData]);
             } else {
                 // JSONL file or other text file
