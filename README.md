@@ -209,6 +209,8 @@ npx ak-fetch ./events.jsonl \
 | `useStaticRetryDelay` | `boolean` | `false` | Use fixed delays vs exponential backoff |
 | `timeout` | `number` | `60000` | Request timeout in milliseconds |
 
+**Note on retry safety (2.1.0+):** Connection resets and body timeouts are now classified as retryable network/timeout errors by default, including on POST requests. If your endpoints are not idempotent, retrying failed requests may result in duplicate operations. Consider using `retryOn`/`retryHandler` to explicitly control retry behavior, or set `retries: 0` for non-idempotent operations.
+
 ### Logging & Output
 
 | Option | Type | Default | Description |
@@ -520,6 +522,7 @@ ak-fetch is built with a modular architecture:
 
 - **Core Engine** (`index.js`): Main processing logic and stream handling
 - **HTTP Client** (`lib/http-client.js`): Connection pooling and request management
+- **Concurrency** (`lib/concurrency.js`): TaskPool for continuous concurrency control
 - **Retry Strategy** (`lib/retry-strategy.js`): Exponential backoff and error handling
 - **Circular Buffer** (`lib/circular-buffer.js`): Memory-efficient response storage
 - **Logger** (`lib/logger.js`): Progress tracking and performance monitoring
