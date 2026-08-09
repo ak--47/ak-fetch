@@ -24,7 +24,10 @@ describe('HttpClient', () => {
                 status: 200,
                 statusText: 'OK',
                 headers: new Map([['content-type', 'application/json']]),
-                json: vi.fn().mockResolvedValue({ success: true })
+                // a real Response exposes text(); getResponseBody() reads text then parses,
+                // because .json() consumes the stream and makes any fallback impossible
+                json: vi.fn().mockResolvedValue({ success: true }),
+                text: vi.fn().mockResolvedValue(JSON.stringify({ success: true }))
             };
 
             global.fetch.mockResolvedValue(mockResponse);
@@ -54,7 +57,10 @@ describe('HttpClient', () => {
                 status: 200,
                 statusText: 'OK',
                 headers: new Map([['content-type', 'application/json']]),
-                json: vi.fn().mockResolvedValue({ success: true })
+                // a real Response exposes text(); getResponseBody() reads text then parses,
+                // because .json() consumes the stream and makes any fallback impossible
+                json: vi.fn().mockResolvedValue({ success: true }),
+                text: vi.fn().mockResolvedValue(JSON.stringify({ success: true }))
             };
 
             global.fetch.mockResolvedValue(mockResponse);
@@ -75,7 +81,10 @@ describe('HttpClient', () => {
                 status: 200,
                 statusText: 'OK',
                 headers: new Map([['content-type', 'application/json']]),
-                json: vi.fn().mockResolvedValue({ success: true })
+                // a real Response exposes text(); getResponseBody() reads text then parses,
+                // because .json() consumes the stream and makes any fallback impossible
+                json: vi.fn().mockResolvedValue({ success: true }),
+                text: vi.fn().mockResolvedValue(JSON.stringify({ success: true }))
             };
 
             global.fetch.mockResolvedValue(mockResponse);
@@ -106,7 +115,10 @@ describe('HttpClient', () => {
                 status: 200,
                 statusText: 'OK',
                 headers: new Map([['content-type', 'application/json']]),
-                json: vi.fn().mockResolvedValue({ success: true })
+                // a real Response exposes text(); getResponseBody() reads text then parses,
+                // because .json() consumes the stream and makes any fallback impossible
+                json: vi.fn().mockResolvedValue({ success: true }),
+                text: vi.fn().mockResolvedValue(JSON.stringify({ success: true }))
             };
 
             global.fetch.mockResolvedValue(mockResponse);
@@ -140,7 +152,10 @@ describe('HttpClient', () => {
                 status: 200,
                 statusText: 'OK',
                 headers: new Map([['content-type', 'application/json']]),
-                json: vi.fn().mockResolvedValue({ success: true })
+                // a real Response exposes text(); getResponseBody() reads text then parses,
+                // because .json() consumes the stream and makes any fallback impossible
+                json: vi.fn().mockResolvedValue({ success: true }),
+                text: vi.fn().mockResolvedValue(JSON.stringify({ success: true }))
             };
 
             global.fetch.mockResolvedValue(mockResponse);
@@ -203,7 +218,10 @@ describe('HttpClient', () => {
                 status: 201,
                 statusText: 'Created',
                 headers: new Map([['content-type', 'application/json']]),
-                json: vi.fn().mockResolvedValue({ id: 456 })
+                // a real Response exposes text(); getResponseBody() reads text then parses,
+                // because .json() consumes the stream and makes any fallback impossible
+                json: vi.fn().mockResolvedValue({ id: 456 }),
+                text: vi.fn().mockResolvedValue(JSON.stringify({ id: 456 }))
             };
 
             global.fetch.mockResolvedValue(mockResponse);
@@ -231,7 +249,10 @@ describe('HttpClient', () => {
                 status: 200,
                 statusText: 'OK',
                 headers: new Map([['content-type', 'application/json']]),
-                json: vi.fn().mockResolvedValue({ updated: true })
+                // a real Response exposes text(); getResponseBody() reads text then parses,
+                // because .json() consumes the stream and makes any fallback impossible
+                json: vi.fn().mockResolvedValue({ updated: true }),
+                text: vi.fn().mockResolvedValue(JSON.stringify({ updated: true }))
             };
 
             global.fetch.mockResolvedValue(mockResponse);
@@ -258,7 +279,10 @@ describe('HttpClient', () => {
                 status: 200,
                 statusText: 'OK',
                 headers: new Map([['content-type', 'application/json']]),
-                json: vi.fn().mockResolvedValue({ patched: true })
+                // a real Response exposes text(); getResponseBody() reads text then parses,
+                // because .json() consumes the stream and makes any fallback impossible
+                json: vi.fn().mockResolvedValue({ patched: true }),
+                text: vi.fn().mockResolvedValue(JSON.stringify({ patched: true }))
             };
 
             global.fetch.mockResolvedValue(mockResponse);
@@ -285,7 +309,10 @@ describe('HttpClient', () => {
                 status: 200,
                 statusText: 'OK',
                 headers: new Map([['content-type', 'application/json']]),
-                json: vi.fn().mockResolvedValue({ results: [] })
+                // a real Response exposes text(); getResponseBody() reads text then parses,
+                // because .json() consumes the stream and makes any fallback impossible
+                json: vi.fn().mockResolvedValue({ results: [] }),
+                text: vi.fn().mockResolvedValue(JSON.stringify({ results: [] }))
             };
 
             global.fetch.mockResolvedValue(mockResponse);

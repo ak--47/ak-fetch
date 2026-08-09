@@ -1232,10 +1232,19 @@ var init_errors = __esm({
 });
 
 // lib/retry-strategy.js
-var RetryStrategy, retry_strategy_default;
+var NETWORK_ERROR_CODES, RetryStrategy, retry_strategy_default;
 var init_retry_strategy = __esm({
   "lib/retry-strategy.js"() {
     init_errors();
+    NETWORK_ERROR_CODES = Object.freeze([
+      "ENOTFOUND",
+      "ECONNRESET",
+      "ECONNREFUSED",
+      "ECONNABORTED",
+      "EHOSTUNREACH",
+      "ENETUNREACH",
+      "EAI_AGAIN"
+    ]);
     RetryStrategy = class {
       /**
        * Create a new retry strategy
@@ -1367,7 +1376,7 @@ var init_retry_strategy = __esm({
        * Checks error codes, names, and types commonly associated with
        * network connectivity issues.
        * 
-       * @param {Error & {code?: string, type?: string}} error - Error to check
+       * @param {Error & {code?: string, type?: string, cause?: any}} error - Error to check
        * @returns {boolean} True if the error is network-related
        * 
        * @example
@@ -1379,16 +1388,8 @@ var init_retry_strategy = __esm({
        * @since 2.0.0
        */
       isNetworkError(error) {
-        const networkErrorCodes = [
-          "ENOTFOUND",
-          "ECONNRESET",
-          "ECONNREFUSED",
-          "ECONNABORTED",
-          "EHOSTUNREACH",
-          "ENETUNREACH",
-          "EAI_AGAIN"
-        ];
-        return networkErrorCodes.includes(error.code) || error.name === "NetworkError" || error.type === "NETWORK_ERROR";
+        return NETWORK_ERROR_CODES.includes(error.code) || // native fetch hides the real code on .cause (finding M-2)
+        NETWORK_ERROR_CODES.includes(error?.cause?.code) || error.name === "NetworkError" || error.type === "NETWORK_ERROR";
       }
       /**
        * Execute a function with retry logic
@@ -1966,6 +1967,19 @@ var init_form_data_handler = __esm({
 });
 
 // lib/http-client.js
+function resolveErrorCode(error) {
+  const seen = /* @__PURE__ */ new Set();
+  const queue = [error];
+  while (queue.length) {
+    const current = queue.shift();
+    if (!current || typeof current !== "object" || seen.has(current)) continue;
+    seen.add(current);
+    if (typeof current.code === "string") return current.code;
+    if (current.cause) queue.push(current.cause);
+    if (Array.isArray(current.errors)) queue.push(...current.errors);
+  }
+  return void 0;
+}
 function getHeader(headers, name) {
   const target = name.toLowerCase();
   for (const key of Object.keys(headers)) {
@@ -1979,7 +1993,7 @@ function deleteHeader(headers, name) {
     if (key.toLowerCase() === target) delete headers[key];
   }
 }
-var import_undici, import_url, import_node_querystring, HttpClient, http_client_default;
+var import_undici, import_url, import_node_querystring, TIMEOUT_ERROR_CODES, HttpClient, http_client_default;
 var init_http_client = __esm({
   "lib/http-client.js"() {
     import_undici = require("undici");
@@ -1989,6 +2003,7 @@ var init_http_client = __esm({
     init_retry_strategy();
     init_cookie_jar();
     init_form_data_handler();
+    TIMEOUT_ERROR_CODES = Object.freeze(["UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT"]);
     HttpClient = class {
       constructor(options = {}) {
         this.options = {
@@ -2197,29 +2212,31 @@ var init_http_client = __esm({
           if (error instanceof AkFetchError) {
             throw error;
           }
-          if (error.code === "ENOTFOUND" || error.code === "ECONNREFUSED") {
-            throw new NetworkError(`Network error: ${error.message}`, {
-              code: error.code,
-              url: requestUrl.toString(),
-              method
-            });
-          }
-          if (error.name === "AbortError" || error.code === "ETIMEDOUT") {
+          const code = resolveErrorCode(error);
+          if (error.name === "AbortError" || code === "ETIMEDOUT" || TIMEOUT_ERROR_CODES.includes(code)) {
             throw new TimeoutError(`Request timeout after ${effectiveTimeout}ms`, {
+              code,
               timeout: effectiveTimeout,
               url: requestUrl.toString(),
               method
             });
           }
-          if (error.code && error.code.startsWith("UNABLE_TO_VERIFY_LEAF_SIGNATURE")) {
+          if (NETWORK_ERROR_CODES.includes(code)) {
+            throw new NetworkError(`Network error: ${error.message}`, {
+              code,
+              url: requestUrl.toString(),
+              method
+            });
+          }
+          if (code && code.startsWith("UNABLE_TO_VERIFY_LEAF_SIGNATURE")) {
             throw new SSLError(`SSL verification failed: ${error.message}`, {
-              code: error.code,
+              code,
               url: requestUrl.toString(),
               method
             });
           }
           throw new AkFetchError(`Request failed: ${error.message}`, {
-            code: error.code,
+            code,
             url: requestUrl.toString(),
             method,
             originalError: error
@@ -2257,10 +2274,11 @@ var init_http_client = __esm({
           return await response.text();
         }
         if (contentType.includes("application/json")) {
+          const text = await response.text();
           try {
-            return await response.json();
-          } catch (error) {
-            return await response.text();
+            return JSON.parse(text);
+          } catch {
+            return text;
           }
         }
         if (contentType.includes("text/")) {
