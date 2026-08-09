@@ -183,7 +183,7 @@ describe('FormDataHandler', () => {
             }).toThrow('Invalid file object');
         });
 
-        // corrected in 2.1.0, see finding A5 in plans/2026-08-08-ak-fetch-2.1.0-review-findings.md
+        // corrected in 2.1.0, see finding A5 in plans/completed/2.1.0/2026-08-08-ak-fetch-2.1.0-review-findings.md
         test('should throw error for stream file objects', () => {
             const streamFile = {
                 stream: {},
@@ -253,7 +253,7 @@ describe('FormDataHandler', () => {
         });
     });
 
-    // corrected in 2.1.0, see finding A5 in plans/2026-08-08-ak-fetch-2.1.0-review-findings.md
+    // corrected in 2.1.0, see finding A5 in plans/completed/2.1.0/2026-08-08-ak-fetch-2.1.0-review-findings.md
     describe('isFilePath', () => {
         test('should identify actual file paths that exist', () => {
             expect(handler.isFilePath(testFilePath)).toBe(true);
@@ -268,7 +268,7 @@ describe('FormDataHandler', () => {
             expect(handler.isFilePath('C:\\Windows\\file.txt')).toBe(false);
         });
 
-        // corrected in 2.1.0, see finding A5 in plans/2026-08-08-ak-fetch-2.1.0-review-findings.md
+        // corrected in 2.1.0, see finding A5 in plans/completed/2.1.0/2026-08-08-ak-fetch-2.1.0-review-findings.md
         test('should reject strings containing slashes that are not paths', () => {
             expect(handler.isFilePath('application/json')).toBe(false);
             expect(handler.isFilePath('a/b/c')).toBe(false);
