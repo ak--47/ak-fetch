@@ -72,6 +72,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **A config array no longer forces `verbose: true`** (second half of B14): `setDefaults()` and `types.d.ts` have always documented `verbose` as defaulting to `false`, and the single-config path honored that, but the multi-config path defaulted it to `true` — so passing an array of configs printed a banner and progress bar that the identical work as a single config did silently. Both paths now default to `false`. Pass `verbose: true` on the first config to get the old array behavior back.
 
+- **Invalid JSON responses now succeed instead of erroring**: Pre-2.1.0, a 200 response with `Content-Type: application/json` but unparseable JSON body produced an error (counted in `result.errors`). Now it resolves successfully with the raw text string as the response body. This matches the intended fallback behavior and enables handling of malformed JSON responses, but if your code relied on such responses surfacing as errors, you'll need to add explicit JSON validation.
+
+- **Retry surface widened for network and timeout errors**: Connection resets (`ECONNRESET`, `ECONNREFUSED`, `EHOSTUNREACH`, etc.) and body/header timeouts are now correctly classified as retryable `NetworkError`/`TimeoutError` and will be retried by default when `retryOnNetworkError: true` (the default). This includes POST requests. If your endpoints are not idempotent, retrying failed requests may produce duplicate operations. Consider using `retryOn`/`retryHandler` to explicitly control retry behavior or set `retries: 0` for non-idempotent operations.
+
 ### Removed
 
 - **Dependencies**: Removed unused/dead dependencies:
