@@ -1,15 +1,24 @@
 // @ts-nocheck
 /**
  * Fire-and-Forget Mode Integration Tests
- * 
+ *
  * Tests fire-and-forget functionality where retries=null
  * and no response storage or error handling occurs.
  */
 
 import akFetch from '../../index.js';
+import { makeServer } from '../helpers/local-server.js';
 
 describe('Fire-and-Forget Mode', () => {
-	const mockUrl = 'https://httpbin.org/post';
+	let server;
+
+	beforeAll(async () => {
+		server = await makeServer();
+	});
+
+	afterAll(async () => {
+		await server.close();
+	});
 
 	describe('Basic Fire-and-Forget Functionality', () => {
 		test('should not store responses when retries=null', async () => {
@@ -20,7 +29,7 @@ describe('Fire-and-Forget Mode', () => {
 			];
 
 			const result = await akFetch({
-				url: mockUrl,
+				url: server.url,
 				data: testData,
 				retries: null,
 				verbose: false,
@@ -37,7 +46,7 @@ describe('Fire-and-Forget Mode', () => {
 			const testData = Array.from({ length: 20 }, (_, i) => ({ id: i, value: `test${i}` }));
 
 			const result = await akFetch({
-				url: mockUrl,
+				url: server.url,
 				data: testData,
 				retries: null,
 				batchSize: 5,
@@ -51,7 +60,7 @@ describe('Fire-and-Forget Mode', () => {
 
 		test('should handle single item in fire-and-forget mode', async () => {
 			const result = await akFetch({
-				url: mockUrl,
+				url: server.url,
 				data: [{ single: true }],
 				retries: null,
 				verbose: false
@@ -66,7 +75,7 @@ describe('Fire-and-Forget Mode', () => {
 	describe('Fire-and-Forget with Different HTTP Methods', () => {
 		test('should work with POST requests', async () => {
 			const result = await akFetch({
-				url: mockUrl,
+				url: server.url,
 				data: [{ test: 'post' }],
 				method: 'POST',
 				retries: null,
@@ -79,7 +88,7 @@ describe('Fire-and-Forget Mode', () => {
 
 		test('should work with PUT requests', async () => {
 			const result = await akFetch({
-				url: 'https://httpbin.org/put',
+				url: server.url,
 				data: [{ test: 'put' }],
 				method: 'PUT',
 				retries: null,
@@ -92,7 +101,7 @@ describe('Fire-and-Forget Mode', () => {
 
 		test('should work with PATCH requests', async () => {
 			const result = await akFetch({
-				url: 'https://httpbin.org/patch',
+				url: server.url,
 				data: [{ test: 'patch' }],
 				method: 'PATCH',
 				retries: null,
@@ -105,7 +114,7 @@ describe('Fire-and-Forget Mode', () => {
 
 		test('should work with DELETE requests', async () => {
 			const result = await akFetch({
-				url: 'https://httpbin.org/delete',
+				url: server.url,
 				data: [{ test: 'delete' }],
 				method: 'DELETE',
 				retries: null,
@@ -127,7 +136,7 @@ describe('Fire-and-Forget Mode', () => {
 			const startTime = Date.now();
 
 			const result = await akFetch({
-				url: mockUrl,
+				url: server.url,
 				data: largeData,
 				retries: null,
 				batchSize: 10,
@@ -152,7 +161,7 @@ describe('Fire-and-Forget Mode', () => {
 			}));
 
 			const result = await akFetch({
-				url: mockUrl,
+				url: server.url,
 				data: data,
 				retries: null,
 				batchSize: 50,
@@ -201,7 +210,7 @@ describe('Fire-and-Forget Mode', () => {
 	describe('Fire-and-Forget with Advanced Features', () => {
 		// test('should work with transform functions', async () => {
 		//     const result = await akFetch({
-		//         url: mockUrl,
+		//         url: server.url,
 		//         data: [{ original: true }],
 		//         retries: null,
 		//         transform: (item) => ({ ...item, transformed: true }),
@@ -214,7 +223,7 @@ describe('Fire-and-Forget Mode', () => {
 
 		test('should work with custom headers', async () => {
 			const result = await akFetch({
-				url: mockUrl,
+				url: server.url,
 				data: [{ test: 'headers' }],
 				retries: null,
 				headers: {
@@ -230,7 +239,7 @@ describe('Fire-and-Forget Mode', () => {
 
 		test('should work with search parameters', async () => {
 			const result = await akFetch({
-				url: mockUrl,
+				url: server.url,
 				data: [{ test: 'params' }],
 				retries: null,
 				searchParams: { mode: 'fire-and-forget', test: true },
@@ -243,7 +252,7 @@ describe('Fire-and-Forget Mode', () => {
 
 		test('should work with body parameters', async () => {
 			const result = await akFetch({
-				url: mockUrl,
+				url: server.url,
 				data: [{ original: 'data' }],
 				retries: null,
 				bodyParams: { wrapper: 'test', mode: 'fire-and-forget' },
@@ -256,7 +265,7 @@ describe('Fire-and-Forget Mode', () => {
 
 		test('should work with connection pooling', async () => {
 			const result = await akFetch({
-				url: mockUrl,
+				url: server.url,
 				data: Array.from({ length: 10 }, (_, i) => ({ id: i })),
 				retries: null,
 				enableConnectionPooling: true,
@@ -275,18 +284,18 @@ describe('Fire-and-Forget Mode', () => {
 		test('should handle multiple fire-and-forget configurations', async () => {
 			const configs = [
 				{
-					url: 'https://httpbin.org/post',
+					url: server.url,
 					data: [{ config: 1 }],
 					retries: null
 				},
 				{
-					url: 'https://httpbin.org/put',
+					url: server.url,
 					data: [{ config: 2 }],
 					method: 'PUT',
 					retries: null
 				},
 				{
-					url: 'https://httpbin.org/patch',
+					url: server.url,
 					data: [{ config: 3 }],
 					method: 'PATCH',
 					retries: null
@@ -304,13 +313,13 @@ describe('Fire-and-Forget Mode', () => {
 		test('should handle mixed fire-and-forget and regular configurations', async () => {
 			const configs = [
 				{
-					url: 'https://httpbin.org/post',
+					url: server.url,
 					data: [{ mode: 'regular' }],
 					retries: 3, // Regular mode
 					dryRun: true // Use dry run to avoid actual requests
 				},
 				{
-					url: 'https://httpbin.org/post',
+					url: server.url,
 					data: [{ mode: 'fire-and-forget' }],
 					retries: null, // Fire-and-forget mode
 					dryRun: true
@@ -327,7 +336,7 @@ describe('Fire-and-Forget Mode', () => {
 	describe('Fire-and-Forget with Streaming', () => {
 		test('should work with file-based streaming', async () => {
 			const result = await akFetch({
-				url: mockUrl,
+				url: server.url,
 				data: './testData/testData.json', // File input
 				retries: null,
 				batchSize: 2,
@@ -367,7 +376,7 @@ describe('Fire-and-Forget Mode', () => {
 
 		test('should work with explicitly set retries null', async () => {
 			const result = await akFetch({
-				url: mockUrl,
+				url: server.url,
 				data: [{ explicit: 'null' }],
 				retries: null, // Explicitly set to null
 				verbose: false

@@ -5,9 +5,28 @@
 
 import main from '../../index.js';
 import { vi } from 'vitest';
+import { makeServer } from '../helpers/local-server.js';
 
 describe('Async Error Handlers', () => {
-    const testUrl = 'https://httpbin.org';
+    let server;
+
+    beforeAll(async () => {
+        server = await makeServer((req, res, body) => {
+            // Check for status in URL path
+            const match = req.url.match(/\/status\/(\d+)/);
+            if (match) {
+                const status = parseInt(match[1]);
+                res.writeHead(status, { 'content-type': 'application/json' });
+                res.end(JSON.stringify({ status, message: `Error ${status}` }));
+                return true;
+            }
+            return false;
+        });
+    });
+
+    afterAll(async () => {
+        await server.close();
+    });
 
     describe('Async errorHandler', () => {
         test('async errorHandler should complete before continuing', async () => {
@@ -15,7 +34,7 @@ describe('Async Error Handlers', () => {
             let handlerStarted = false;
 
             const config = {
-                url: `${testUrl}/status/400`,
+                url: `${server.url}/status/400`,
                 method: 'POST',
                 data: [{ test: 'data' }],
                 noBatch: true,
@@ -38,7 +57,7 @@ describe('Async Error Handlers', () => {
             let errorCaptured = null;
 
             const config = {
-                url: `${testUrl}/status/400`,
+                url: `${server.url}/status/400`,
                 method: 'POST',
                 data: [{ test: 'data' }],
                 noBatch: true,
@@ -60,7 +79,7 @@ describe('Async Error Handlers', () => {
             console.error = consoleErrorSpy;
 
             const config = {
-                url: `${testUrl}/status/500`,
+                url: `${server.url}/status/500`,
                 method: 'POST',
                 data: [{ test: 'data' }],
                 noBatch: true,
@@ -93,7 +112,7 @@ describe('Async Error Handlers', () => {
             let attemptCount = 0;
 
             const config = {
-                url: `${testUrl}/status/500`,
+                url: `${server.url}/status/500`,
                 method: 'POST',
                 data: [{ test: 'data' }],
                 retries: 2,
@@ -119,7 +138,7 @@ describe('Async Error Handlers', () => {
             let capturedAttempt = null;
 
             const config = {
-                url: `${testUrl}/status/500`,
+                url: `${server.url}/status/500`,
                 method: 'POST',
                 data: [{ test: 'data' }],
                 retries: 1,
@@ -141,7 +160,7 @@ describe('Async Error Handlers', () => {
             let handlerCalled = false;
 
             const config = {
-                url: `${testUrl}/status/500`,
+                url: `${server.url}/status/500`,
                 method: 'POST',
                 data: [{ test: 'data' }],
                 retries: 2,
@@ -166,7 +185,7 @@ describe('Async Error Handlers', () => {
             let retryCount = 0;
 
             const config = {
-                url: `${testUrl}/status/503`,
+                url: `${server.url}/status/503`,
                 method: 'POST',
                 data: [{ test: 'data' }],
                 retries: 2,

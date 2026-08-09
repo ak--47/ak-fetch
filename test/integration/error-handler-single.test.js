@@ -4,10 +4,28 @@
  */
 
 import akFetch from '../../index.js';
+import { makeServer } from '../helpers/local-server.js';
 
 describe('Single Request Error Handling', () => {
-    // Use httpbin.org which provides reliable error endpoints
-    const testUrl = 'https://httpbin.org';
+    let server;
+
+    beforeAll(async () => {
+        server = await makeServer((req, res, body) => {
+            // Check for status in URL path
+            const match = req.url.match(/\/status\/(\d+)/);
+            if (match) {
+                const status = parseInt(match[1]);
+                res.writeHead(status, { 'content-type': 'application/json' });
+                res.end(JSON.stringify({ status, message: `Error ${status}` }));
+                return true;
+            }
+            return false;
+        });
+    });
+
+    afterAll(async () => {
+        await server.close();
+    });
 
     describe('errorHandler callback', () => {
         test('should call errorHandler on 400 error in single request mode', async () => {
@@ -15,7 +33,7 @@ describe('Single Request Error Handling', () => {
             let capturedError = null;
 
             const config = {
-                url: `${testUrl}/status/400`,
+                url: `${server.url}/status/400`,
                 method: 'POST',
                 data: { test: 'data' },
                 noBatch: true,
@@ -27,18 +45,18 @@ describe('Single Request Error Handling', () => {
             };
 
             await expect(akFetch(config)).rejects.toThrow('HTTP 400');
-            
+
             expect(errorHandlerCalled).toBe(true);
             expect(capturedError).toBeDefined();
             expect(capturedError.statusCode).toBe(400);
             expect(capturedError.body).toBeDefined();
-        }, 15000);
+        });
 
         test('should still throw error after calling errorHandler', async () => {
             let errorHandlerCalled = false;
 
             const config = {
-                url: `${testUrl}/status/400`,
+                url: `${server.url}/status/400`,
                 method: 'POST',
                 data: { test: 'data' },
                 noBatch: true,
@@ -50,13 +68,13 @@ describe('Single Request Error Handling', () => {
 
             await expect(akFetch(config)).rejects.toThrow('HTTP 400');
             expect(errorHandlerCalled).toBe(true);
-        }, 15000);
+        });
 
         test('should include response body in error when errorHandler is called', async () => {
             let capturedError = null;
 
             const config = {
-                url: `${testUrl}/status/400`,
+                url: `${server.url}/status/400`,
                 method: 'POST',
                 data: { test: 'data' },
                 noBatch: true,
@@ -67,20 +85,20 @@ describe('Single Request Error Handling', () => {
             };
 
             await expect(akFetch(config)).rejects.toThrow();
-            
+
             expect(capturedError).toBeDefined();
             expect(capturedError.body).toBeDefined();
             expect(capturedError.headers).toBeDefined();
             expect(capturedError.statusCode).toBe(400);
             expect(capturedError.url).toContain('/status/400');
             expect(capturedError.method).toBe('POST');
-        }, 15000);
+        });
     });
 
     describe('error handling without errorHandler', () => {
         test('should still include response body in thrown error', async () => {
             const config = {
-                url: `${testUrl}/status/400`,
+                url: `${server.url}/status/400`,
                 method: 'POST',
                 data: { test: 'data' },
                 noBatch: true,
@@ -97,6 +115,6 @@ describe('Single Request Error Handling', () => {
                 expect(error.url).toContain('/status/400');
                 expect(error.method).toBe('POST');
             }
-        }, 15000);
+        });
     });
 });

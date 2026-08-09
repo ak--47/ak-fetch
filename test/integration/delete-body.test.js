@@ -5,8 +5,18 @@
 
 import main from '../../index.js';
 import HttpClient from '../../lib/http-client.js';
+import { makeServer } from '../helpers/local-server.js';
 
 describe('Integration Tests - DELETE with Body', () => {
+    let server;
+
+    beforeAll(async () => {
+        server = await makeServer();
+    });
+
+    afterAll(async () => {
+        await server.close();
+    });
     describe('DELETE request body handling', () => {
         test('should send JSON body with DELETE request in dry-run curl mode', async () => {
             const config = {
@@ -119,9 +129,8 @@ describe('Integration Tests - DELETE with Body', () => {
 
     describe('Real HTTP DELETE requests', () => {
         test('should successfully send DELETE request with JSON body', async () => {
-            // Using httpbin.org which echoes back the request data
             const config = {
-                url: 'https://httpbin.org/delete',
+                url: server.url,
                 method: 'DELETE',
                 data: [{ id: 456, action: 'remove', timestamp: Date.now() }],
                 retries: 0 // Disable retries for faster test
@@ -136,17 +145,21 @@ describe('Integration Tests - DELETE with Body', () => {
             if (result.responses && result.responses.length > 0) {
                 const response = result.responses[0];
 
-                // httpbin.org returns the sent data in the response
-                if (typeof response === 'object' && response.json) {
-                    expect(response.json.id).toBe(456);
-                    expect(response.json.action).toBe('remove');
+                // Local server echoes back the sent data
+                if (typeof response === 'object' && response.echo) {
+                    expect(response.echo.id).toBe(456);
+                    expect(response.echo.action).toBe('remove');
                 }
             }
+
+            // Verify the request was received by the server
+            expect(server.requests.length).toBeGreaterThan(0);
+            expect(server.requests[server.requests.length - 1].method).toBe('DELETE');
         });
 
         test('should batch DELETE requests correctly', async () => {
             const config = {
-                url: 'https://httpbin.org/delete',
+                url: server.url,
                 method: 'DELETE',
                 data: [
                     { id: 1, batch: 'first' },
